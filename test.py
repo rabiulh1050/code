@@ -1,53 +1,33 @@
-def check_s3_objects_v2(bucket_name, parent_directory):
+import boto3
+
+def copy_s3_objects(source_bucket, source_prefix, destination_bucket, destination_prefix):
     """
-    Checks if a specified parent directory in an AWS S3 bucket contains exactly 3 objects
-    with filenames ending with par01.zip, par02.zip, and par03.zip, and extracts the date part.
+    Copies a set of objects from a source location to a destination location within S3.
     
     Parameters:
-    - bucket_name: The name of the S3 bucket.
-    - parent_directory: The parent directory path within the bucket.
-    
-    Returns:
-    - A list containing the date parts extracted from the filenames and a list of all 3 object prefixes,
-      or a message indicating any issues encountered.
+    - source_bucket: The name of the source S3 bucket.
+    - source_prefix: The key prefix for objects in the source bucket to be copied.
+    - destination_bucket: The name of the destination S3 bucket.
+    - destination_prefix: The key prefix for objects in the destination bucket.
     """
-    # Ensure parent_directory is formatted correctly
-    if not parent_directory.endswith('/'):
-        parent_directory += '/'
-    
-    # Initialize boto3 S3 client
     s3_client = boto3.client('s3')
+    # List objects in the source bucket with the specified prefix
+    response = s3_client.list_objects_v2(Bucket=source_bucket, Prefix=source_prefix)
     
-    try:
-        response = s3_client.list_objects_v2(Bucket=bucket_name, Prefix=parent_directory, Delimiter='/')
-        objects = response.get('Contents', [])
-        
-        # Filter objects that end with the required suffixes
-        filtered_objects = [obj for obj in objects if obj['Key'].endswith(('par01.zip', 'par02.zip', 'par03.zip'))]
-        
-        # Verify there are exactly 3 such objects
-        if len(filtered_objects) != 3:
-            return "Directory does not contain exactly 3 objects with the required endings.", None
-        
-        dates = []
-        prefixes = []
-        
-        for obj in filtered_objects:
-            filename = obj['Key'].split('/')[-1]
-            # Extract the date part - assuming it's at the start of the filename, before a delimiter like "-"
-            date_part = re.search(r'^(\d+)', filename)
-            if date_part:
-                dates.append(date_part.group(1))
-                prefix = filename[:filename.find('-par')]
-                prefixes.append(prefix)
-            else:
-                return "Failed to extract the date part from one or more filenames.", None
-        
-        return dates, prefixes
-    
-    except Exception as e:
-        return f"An error occurred: {str(e)}", None
+    if 'Contents' in response:
+        for obj in response['Contents']:
+            source_key = obj['Key']
+            destination_key = destination_prefix + source_key[len(source_prefix):]
+            
+            # Copy object from source to destination
+            copy_source = {
+                'Bucket': source_bucket,
+                'Key': source_key
+            }
+            s3_client.copy(copy_source, destination_bucket, destination_key)
+            print(f"Copied {source_key} to {destination_key} in bucket {destination_bucket}")
+    else:
+        print("No objects found with the specified prefix.")
 
 # Example function call (commented out to prevent execution)
-# result = check_s3_objects_v2("example-bucket", "path/to/parent-directory")
-# print(result)
+# copy_s3_objects('source-bucket', 'source-prefix/', 'destination-bucket', 'destination-prefix/')
