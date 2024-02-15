@@ -1,3 +1,98 @@
+events = [
+    "happyPath",
+    "mismatch",
+    "scanned",
+    "missingfile",
+    "missingcountfile",
+    "multievent"
+]
+
+test_results = {
+    "happyPath": ["Succeeded", "Succeeded", "Succeeded", "Succeeded"],
+    "mismatch": ["Succeeded", "Failed", "Not Run", "Not Run"],
+    "scanned": ["Succeeded", "Succeeded", "Failed", "Not Run"],
+    "missingfile": ["Failed", "Not Run", "Not Run", "Not Run"],
+    "missingcountfile": ["Succeeded", "Failed", "Succeeded", "Not Run"],
+    "multievent": ["Succeeded", "Succeeded", "Succeeded", "Failed"]
+}
+
+status_classes = {
+    "Succeeded": "succeeded",
+    "Failed": "failed",
+    "Not Run": "not-run"
+}
+
+html_template = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Test Automation Report</title>
+    <style>
+        .succeeded {{ background-color: #4CAF50; color: white; }}
+        .failed {{ background-color: #F44336; color: white; }}
+        .not-run {{ background-color: #9E9E9E; color: white; }}
+        table, th, td {{
+            border: 1px solid black;
+            border-collapse: collapse;
+            padding: 5px;
+            text-align: center;
+        }}
+        th {{ background-color: #f2f2f2; }}
+    </style>
+</head>
+<body>
+    <h1>Test Automation Report</h1>
+    <p>Environment: Production</p>
+    <p>OS: Linux</p>
+    <p>Python Version: 3.8</p>
+    <p>Test Execution Timestamp: {timestamp}</p>
+
+    <table>
+        <tr>
+            <th>Event</th>
+            <th>Data Validation</th>
+            <th>DSet Validation</th>
+            <th>Notification Validation</th>
+            <th>DTF Validation</th>
+        </tr>
+        {rows}
+    </table>
+</body>
+</html>
+"""
+
+def generate_html_report(events, test_results):
+    rows = ""
+    for event in events:
+        results = test_results.get(event, ["Not Run"] * 4)
+        row = f"<tr>\n<td>{event}</td>\n"
+        for status in results:
+            css_class = status_classes.get(status, "not-run")
+            row += f'<td class="{css_class}">{status}</td>\n'
+        row += "</tr>\n"
+        rows += row
+
+    current_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    return html_template.format(timestamp=current_timestamp, rows=rows)
+
+# Generate HTML content
+html_content = generate_html_report(events, test_results)
+
+# You can then save this HTML content to a file or use it as needed
+with open("test_report.html", "w") as report_file:
+    report_file.write(html_content)
+
+print("HTML report generated successfully.")
+
+
+
+
+
+
+
+
+
 # Setup logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
