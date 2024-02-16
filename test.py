@@ -1,9 +1,9 @@
 from datetime import datetime
 
-# Updated test_results to the new dictionary format
+# Updated test_results to include an "Error" status example
 test_results = {
     "happyPath": {"Data Validation": "Succeeded", "DSet Validation": "Succeeded", "Notification Validation": "Succeeded", "DTF Validation": "Succeeded"},
-    "mismatch": {"Data Validation": "Succeeded", "DSet Validation": "Failed", "Notification Validation": "Not Run", "DTF Validation": "Not Run"},
+    "mismatch": {"Data Validation": "Succeeded", "DSet Validation": "Failed", "Notification Validation": "Not Run", "DTF Validation": "Error"},  # Example with "Error" status
     "scanned": {"Data Validation": "Succeeded", "DSet Validation": "Succeeded", "Notification Validation": "Failed", "DTF Validation": "Not Run"},
     "missingfile": {"Data Validation": "Failed", "DSet Validation": "Not Run", "Notification Validation": "Not Run", "DTF Validation": "Not Run"},
     "missingcountfile": {"Data Validation": "Succeeded", "DSet Validation": "Failed", "Notification Validation": "Succeeded", "DTF Validation": "Not Run"},
@@ -13,7 +13,8 @@ test_results = {
 status_classes = {
     "Succeeded": "succeeded",
     "Failed": "failed",
-    "Not Run": "not-run"
+    "Not Run": "not-run",
+    "Error": "error"  # Added "Error" status class
 }
 
 html_template = """
@@ -21,72 +22,84 @@ html_template = """
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Test Automation Report</title>
+    <title>DR Automation Test Report</title>
     <style>
-        .succeeded {{ background-color: #4CAF50; color: white; }}
-        .failed {{ background-color: #F44336; color: white; }}
-        .not-run {{ background-color: #9E9E9E; color: white; }}
-        table, th, td {{
-            border: 1px solid black;
-            border-collapse: collapse;
-            padding: 5px;
-            text-align: center;
+        :root {{
+            --success-color: #4CAF50;
+            --fail-color: #F44336;
+            --not-run-color: #9E9E9E;
+            --error-color: #FF9800; /* Color for Error status */
+            --background-color: #f2f2f2;
         }}
-        th {{ background-color: #f2f2f2; }}
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+        }}
+        .report-container {{
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 20px;
+        }}
+        .report-item {{
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        .report-item h2 {{
+            font-size: 20px;
+            margin-top: 0;
+        }}
+        .status {{
+            padding: 5px 10px;
+            color: white;
+            border-radius: 4px;
+            display: inline-block;
+            margin-top: 5px; /* Added margin for visual spacing between status items */
+        }}
+        .succeeded {{ background-color: var(--success-color); }}
+        .failed {{ background-color: var(--fail-color); }}
+        .not-run {{ background-color: var(--not-run-color); }}
+        .error {{ background-color: var(--error-color); }} /* Style for Error status */
+        .metadata {{
+            margin-top: 20px;
+            background: var(--background-color);
+            padding: 10px;
+            border-radius: 4px;
+        }}
     </style>
 </head>
 <body>
-    <h1>Test Automation Report</h1>
-    <p>Environment: Production</p>
-    <p>OS: Linux</p>
-    <p>Python Version: 3.8</p>
-    <p>Test Execution Timestamp: {timestamp}</p>
-
-    <table>
-        <tr>
-            <th>Event</th>
-            <th>Data Validation</th>
-            <th>DSet Validation</th>
-            <th>Notification Validation</th>
-            <th>DTF Validation</th>
-        </tr>
+    <h1>DR Automation Test Report</h1>
+    <div class="metadata">
+        <p>Environment: {environment}</p>
+        <p>Test Execution Timestamp: {timestamp}</p>
+    </div>
+    <div class="report-container">
         {rows}
-    </table>
+    </div>
 </body>
 </html>
 """
 
-def generate_html_report(events, test_results):
+def generate_html_report(test_results, current_timestamp, test_environment):
     rows = ""
-    validation_steps = ["Data Validation", "DSet Validation", "Notification Validation", "DTF Validation"]
-    for event in events:
-        event_results = test_results.get(event, {step: "Not Run" for step in validation_steps})
-        row = f"<tr>\n<td>{event}</td>\n"
-        for step in validation_steps:
-            status = event_results.get(step, "Not Run")
+    for event, results in test_results.items():
+        row = f'<div class="report-item">\n<h2>{event}</h2>\n'
+        for step, status in results.items():
             css_class = status_classes.get(status, "not-run")
-            row += f'<td class="{css_class}">{status}</td>\n'
-        row += "</tr>\n"
+            row += f'<div class="status {css_class}">{step}: {status}</div>\n'
+        row += "</div>\n"
         rows += row
-
-    current_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-    return html_template.format(timestamp=current_timestamp, rows=rows)
-
-# Assuming events list is still relevant for iterating through events
-events = [
-    "happyPath",
-    "mismatch",
-    "scanned",
-    "missingfile",
-    "missingcountfile",
-    "multievent"
-]
+    return html_template.format(timestamp=current_timestamp, rows=rows, environment = test_environment)
 
 # Generate HTML content
-html_content = generate_html_report(events, test_results)
+test_environment = "QA Test"
+current_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+html_content = generate_html_report(test_results, current_timestamp, test_environment)
 
 # Save this HTML content to a file
-with open("test_report.html", "w") as report_file:
+with open("DR_Automation_test_report.html", "w") as report_file:
     report_file.write(html_content)
 
 print("HTML report generated successfully.")
