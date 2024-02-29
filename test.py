@@ -1,4 +1,5 @@
 import re
+import os
 
 # Function to convert INSERT INTO to SELECT
 def convert_insert_to_select(sql_content):
@@ -13,7 +14,7 @@ def convert_insert_to_select(sql_content):
     else:
         raise ValueError("No INSERT statement found.")
 
-# Function to read the SQL file, convert the INSERT to SELECT, and overwrite the file
+# Function to read the SQL file, convert the INSERT to SELECT, and save it as a new file
 def process_sql_file(file_path):
     # Read the SQL file
     with open(file_path, 'r') as file:
@@ -22,14 +23,18 @@ def process_sql_file(file_path):
     # Convert the INSERT statement to a SELECT statement
     select_statement = convert_insert_to_select(sql_content)
 
-    # Write the converted SELECT statement back to the file
-    with open(file_path, 'w') as file:
+    # Create new file path with "test" appended before the file extension
+    new_file_path = f"{os.path.splitext(file_path)[0]}test{os.path.splitext(file_path)[1]}"
+
+    # Write the converted SELECT statement to the new file
+    with open(new_file_path, 'w') as file:
         file.write(select_statement)
 
-    print(f"The file {file_path} has been updated with the SELECT statement.")
+    print(f"The new file {new_file_path} has been created with the SELECT statement.")
 
-# Path to the SQL file
-sql_file_path = 'path_to_your_sql_file.sql'
-
-# Process the SQL file
-process_sql_file(sql_file_path)
+# Example usage
+if __name__ == "__main__":
+    # Replace 'path_to_your_sql_file.sql' with the actual path to your SQL file
+    sql_file_path = 'path_to_your_sql_file.sql'
+    # Process the SQL file
+    process_sql_file(sql_file_path)
