@@ -1,105 +1,35 @@
-from datetime import datetime
+import re
 
-# Updated test_results to include an "Error" status example
-test_results = {
-    "happyPath": {"Data Validation": "Succeeded", "DSet Validation": "Succeeded", "Notification Validation": "Succeeded", "DTF Validation": "Succeeded"},
-    "mismatch": {"Data Validation": "Succeeded", "DSet Validation": "Failed", "Notification Validation": "Not Run", "DTF Validation": "Error"},  # Example with "Error" status
-    "scanned": {"Data Validation": "Succeeded", "DSet Validation": "Succeeded", "Notification Validation": "Failed", "DTF Validation": "Not Run"},
-    "missingfile": {"Data Validation": "Failed", "DSet Validation": "Not Run", "Notification Validation": "Not Run", "DTF Validation": "Not Run"},
-    "missingcountfile": {"Data Validation": "Succeeded", "DSet Validation": "Failed", "Notification Validation": "Succeeded", "DTF Validation": "Not Run"},
-    "multievent": {"Data Validation": "Succeeded", "DSet Validation": "Succeeded", "Notification Validation": "Succeeded", "DTF Validation": "Failed"}
-}
+# Function to convert INSERT INTO to SELECT
+def convert_insert_to_select(sql_content):
+    # Regular expression to find the INSERT statement
+    match = re.search(r'INSERT INTO\s+(\w+)\s+\((.*?)\)\s+VALUES\s+\((.*?)\);', sql_content, re.IGNORECASE)
+    if match:
+        # Extract table name and column values
+        table_name, columns, values = match.groups()
+        # Create the SELECT statement
+        select_statement = f'SELECT {values} FROM {table_name} WHERE 1=0;'
+        return select_statement
+    else:
+        raise ValueError("No INSERT statement found.")
 
-status_classes = {
-    "Succeeded": "succeeded",
-    "Failed": "failed",
-    "Not Run": "not-run",
-    "Error": "error"  # Added "Error" status class
-}
+# Function to read the SQL file, convert the INSERT to SELECT, and overwrite the file
+def process_sql_file(file_path):
+    # Read the SQL file
+    with open(file_path, 'r') as file:
+        sql_content = file.read()
 
-html_template = """
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <title>DR Automation Test Report</title>
-    <style>
-        :root {{
-            --success-color: #4CAF50;
-            --fail-color: #F44336;
-            --not-run-color: #9E9E9E;
-            --error-color: #FF9800; /* Color for Error status */
-            --background-color: #f2f2f2;
-        }}
-        body {{
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 20px;
-        }}
-        .report-container {{
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-            gap: 20px;
-        }}
-        .report-item {{
-            border: 1px solid #ddd;
-            padding: 20px;
-            border-radius: 5px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }}
-        .report-item h2 {{
-            font-size: 20px;
-            margin-top: 0;
-        }}
-        .status {{
-            padding: 5px 10px;
-            color: white;
-            border-radius: 4px;
-            display: inline-block;
-            margin-top: 5px; /* Added margin for visual spacing between status items */
-        }}
-        .succeeded {{ background-color: var(--success-color); }}
-        .failed {{ background-color: var(--fail-color); }}
-        .not-run {{ background-color: var(--not-run-color); }}
-        .error {{ background-color: var(--error-color); }} /* Style for Error status */
-        .metadata {{
-            margin-top: 20px;
-            background: var(--background-color);
-            padding: 10px;
-            border-radius: 4px;
-        }}
-    </style>
-</head>
-<body>
-    <h1>DR Automation Test Report</h1>
-    <div class="metadata">
-        <p>Environment: {environment}</p>
-        <p>Test Execution Timestamp: {timestamp}</p>
-    </div>
-    <div class="report-container">
-        {rows}
-    </div>
-</body>
-</html>
-"""
+    # Convert the INSERT statement to a SELECT statement
+    select_statement = convert_insert_to_select(sql_content)
 
-def generate_html_report(test_results, current_timestamp, test_environment):
-    rows = ""
-    for event, results in test_results.items():
-        row = f'<div class="report-item">\n<h2>{event}</h2>\n'
-        for step, status in results.items():
-            css_class = status_classes.get(status, "not-run")
-            row += f'<div class="status {css_class}">{step}: {status}</div>\n'
-        row += "</div>\n"
-        rows += row
-    return html_template.format(timestamp=current_timestamp, rows=rows, environment = test_environment)
+    # Write the converted SELECT statement back to the file
+    with open(file_path, 'w') as file:
+        file.write(select_statement)
 
-# Generate HTML content
-test_environment = "QA Test"
-current_timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-html_content = generate_html_report(test_results, current_timestamp, test_environment)
+    print(f"The file {file_path} has been updated with the SELECT statement.")
 
-# Save this HTML content to a file
-with open("DR_Automation_test_report.html", "w") as report_file:
-    report_file.write(html_content)
+# Path to the SQL file
+sql_file_path = 'path_to_your_sql_file.sql'
 
-print("HTML report generated successfully.")
+# Process the SQL file
+process_sql_file(sql_file_path)
