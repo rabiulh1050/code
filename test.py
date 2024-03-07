@@ -38,3 +38,11 @@ if __name__ == "__main__":
     sql_file_path = 'path_to_your_sql_file.sql'
     # Process the SQL file
     process_sql_file(sql_file_path)
+
+
+
+I hope this email finds you in great spirits.
+
+I wanted to touch base with you regarding my upcoming vacation, which is set from April 22nd to May 3rd. During this time, I'll be traveling outside the country. I've made sure to mark these dates clearly on my Outlook calendar and have also shared this information with the team during our recent meetings.
+
+Thank you for your support and understanding. I look forward to your confirmation of my leave dates.
