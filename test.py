@@ -40,24 +40,28 @@ if __name__ == "__main__":
     process_sql_file(sql_file_path)
 
 
-
 from datetime import datetime
 
 test_results = {
-    "happyPath": {"Data Validation": "Succeeded","Step Function Validation": "Succeeded", "DSet Validation": "Succeeded", "Notification Validation": "Succeeded", "DTF Validation": "Succeeded"},
-    "mismatch": {"Data Validation": "Succeeded", "DSet Validation": "Failed", "Notification Validation": "Not Run", "DTF Validation": "Error"},  # Example with "Error" status
-    "scanned": {"Data Validation": "Succeeded", "DSet Validation": "Succeeded", "Notification Validation": "Failed", "DTF Validation": "Not Run"},
+    "happyPath": {"Data Validation": "Not Required","Step Function Validation": "Succeeded", "DSet Validation": "Succeeded", "Notification Validation": "Succeeded", "DTF Validation": "Succeeded"},
+    "mismatch": {"Data Validation": "Succeeded", "DSet Validation": "Failed", "Notification Validation": "Not Run", "DTF Validation": "Error"}, 
+    "scanned": {"Data Validation": "Succeeded", "DSet Validation": "Succeeded", "Notification Validation": "Failed", "DTF Validation": "Not Required"},
     "missingfile": {"Data Validation": "Failed", "DSet Validation": "Not Run", "Notification Validation": "Not Run", "DTF Validation": "Not Run"},
     "missingcountfile": {"Data Validation": "Succeeded", "DSet Validation": "Failed", "Notification Validation": "Succeeded", "DTF Validation": "Not Run"},
-    #"multievent": {"Data Validation": "Succeeded", "DSet Validation": "Succeeded", "Notification Validation": "Succeeded", "DTF Validation": "Failed"}
+    "multievent": {"Data Validation": "Succeeded", "DSet Validation": "Succeeded", "Email Notification Validation": "Succeeded", "DTF Validation": "Failed"}
 }
 
 status_classes = {
     "Succeeded": "succeeded",
     "Failed": "failed",
-    "Not Run": "not-run"
+    "Not Run": "not-run",
+    "Error": "error",
+    "Not Required": "not-required" 
 }
-# Your existing test_results and status_classes remain unchanged.
+
+from datetime import datetime
+
+# Assuming test_results and status_classes remain unchanged.
 
 html_template = """
 <!DOCTYPE html>
@@ -69,17 +73,21 @@ html_template = """
         :root {{
             --success-color: #4CAF50;
             --fail-color: #F44336;
-            --not-run-color: #9E9E9E;
-            --error-color: #FF9800; /* Color for Error status */
+            --not-run-color: #FF9800;
+            --error-color: #F44336;
+            --not-required-color: #607D8B; 
             --background-color: #f2f2f2;
         }}
         body {{
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 20px;
         }}
+        h1 {{
+            text-align: center; 
+        }}
         .report-container {{
             display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
             gap: 20px;
         }}
         .report-item {{
@@ -87,6 +95,7 @@ html_template = """
             padding: 20px;
             border-radius: 5px;
             box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: auto; 
         }}
         .report-item h2 {{
             font-size: 20px;
@@ -97,12 +106,15 @@ html_template = """
             color: white;
             border-radius: 4px;
             display: inline-block;
-            margin-top: 5px; /* Added margin for visual spacing between status items */
+            margin-top: 5px;
+            margin-right: 10px; 
+            white-space: nowrap; 
         }}
         .succeeded {{ background-color: var(--success-color); }}
         .failed {{ background-color: var(--fail-color); }}
         .not-run {{ background-color: var(--not-run-color); }}
-        .error {{ background-color: var(--error-color); }} /* Style for Error status */
+        .error {{ background-color: var(--error-color); }}
+        .not-required {{ background-color: var(--not-required-color); }} 
         .metadata {{
             margin-top: 20px;
             background: var(--background-color);
@@ -116,11 +128,9 @@ html_template = """
     </style>
 </head>
 <body>
-    <h1>Test Automation Report</h1>
+    <h1>{test_name}</h1>
     <div class="metadata">
-        <p>Environment: Production</p>
-        <p>OS: Linux</p>
-        <p>Python Version: 3.8</p>
+        <p>Environment: {environment}</p>
         <p>Test Execution Timestamp: {timestamp}</p>
     </div>
     <div class="report-container">
@@ -130,6 +140,7 @@ html_template = """
 </body>
 </html>
 """
+
 
 def generate_html_report(test_results):
     rows = ""
@@ -144,8 +155,8 @@ def generate_html_report(test_results):
         if event == "multievent":
             multievent_explanation = "<div class='explanation'>The 'multievent' encompasses various scenarios where multiple conditions are tested simultaneously.</div>"
 
-    current_timestamp = datetime.now().strftime('%Y%m%d')  # Updated as per your previous request
-    return html_template.format(timestamp=current_timestamp, rows=rows, multievent_explanation=multievent_explanation)
+    current_timestamp = datetime.now().strftime('%Y%m%d')
+    return html_template.format(test_name = 'DR Test Automation Report',timestamp=current_timestamp, rows=rows, environment = 'test env', multievent_explanation=multievent_explanation)
 
 # Generate HTML content
 html_content = generate_html_report(test_results)
@@ -155,6 +166,8 @@ with open("test_report.html", "w") as report_file:
     report_file.write(html_content)
 
 print("HTML report generated successfully.")
+
+
 
 
 
