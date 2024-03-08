@@ -156,3 +156,67 @@ with open("test_report.html", "w") as report_file:
 
 print("HTML report generated successfully.")
 
+
+
+
+import logging
+import traceback
+import time
+from logging.handlers import RotatingFileHandler
+
+# Configure logging
+def configure_logging():
+    logging.basicConfig(level=logging.INFO,
+                        format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S',
+                        handlers=[RotatingFileHandler('automation_tests.log', maxBytes=5*1024*1024, backupCount=2),
+                                  logging.StreamHandler()])
+    return logging.getLogger('AutomationTestLogger')
+
+logger = configure_logging()
+
+# Enhanced function to log errors with traceback
+def log_errors(error):
+    tb = traceback.TracebackException.from_exception(error, capture_locals=True)
+    logger.error("".join(tb.format()))
+
+# Function to log test execution details
+def log_test_execution(test_name, execution_function, *args, **kwargs):
+    logger.info(f"Starting test: {test_name}")
+    start_time = time.time()
+    try:
+        execution_function(*args, **kwargs)
+        end_time = time.time()
+        logger.info(f"Test '{test_name}' passed. Execution time: {end_time - start_time:.2f} seconds")
+    except Exception as e:
+        end_time = time.time()
+        logger.error(f"Test '{test_name}' failed. Execution time: {end_time - start_time:.2f} seconds")
+        log_errors(e)
+
+# Example usage of the logging functions
+def example_test_function(parameter):
+    # Simulate test logic, which may raise an exception
+    if parameter < 0:
+        raise ValueError("Parameter must be non-negative!")
+    else:
+        # Simulate test operations
+        logger.info("Example test function executed successfully.")
+
+# Example test execution logging
+log_test_execution("Example Test Function", example_test_function, -1)  # This will log an error
+log_test_execution("Example Test Function", example_test_function, 1)   # This will log success
+
+
+import logging
+from logging.handlers import RotatingFileHandler
+
+# Basic configuration for logging
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                    datefmt='%Y-%m-%d %H:%M:%S',
+                    handlers=[RotatingFileHandler('application.log', maxBytes=5000000, backupCount=5),
+                              logging.StreamHandler()])
+
+logger = logging.getLogger(__name__)
+
+
