@@ -220,3 +220,70 @@ logging.basicConfig(level=logging.INFO,
 logger = logging.getLogger(__name__)
 
 
+
+
+import logging
+import traceback
+import time
+from logging.handlers import RotatingFileHandler
+
+def configure_logging(log_filename='automation_tests.log', max_bytes=5*1024*1024, backup_count=2):
+    """
+    Configures the logging system, setting up file rotation and stream handlers.
+
+    :param log_filename: Name of the log file.
+    :param max_bytes: Maximum size in bytes before rotating the log file.
+    :param backup_count: Number of backup files to keep.
+    """
+    logging.basicConfig(level=logging.INFO,
+                        format='%(asctime)s - %(levelname)s - %(name)s - %(message)s',
+                        datefmt='%Y-%m-%d %H:%M:%S',
+                        handlers=[RotatingFileHandler(log_filename, maxBytes=max_bytes, backupCount=backup_count),
+                                  logging.StreamHandler()])
+    return logging.getLogger('AutomationTestLogger')
+
+logger = configure_logging()
+
+def log_errors(error):
+    """
+    Logs detailed errors, including traceback.
+
+    :param error: Exception object to log.
+    """
+    tb = traceback.TracebackException.from_exception(error)
+    logger.error("Exception occurred: " + "".join(tb.format()))
+
+def log_test_execution(test_name, execution_function, *args, **kwargs):
+    """
+    Wraps test execution function calls with logging for start, success, and failure.
+
+    :param test_name: Name of the test for logging.
+    :param execution_function: Test function to execute.
+    :param args: Positional arguments for the test function.
+    :param kwargs: Keyword arguments for the test function.
+    """
+    logger.info(f"Starting test: {test_name}")
+    start_time = time.time()
+    try:
+        execution_function(*args, **kwargs)
+        end_time = time.time()
+        logger.info(f"Test '{test_name}' passed. Execution time: {end_time - start_time:.2f} seconds")
+    except Exception as e:
+        end_time = time.time()
+        logger.error(f"Test '{test_name}' failed. Execution time: {end_time - start_time:.2f} seconds")
+        log_errors(e)
+
+# Example test function
+def example_test_function(parameter):
+    """
+    Example test function that simulates test logic.
+
+    :param parameter: A test parameter that must be non-negative.
+    """
+    if parameter < 0:
+        raise ValueError("Parameter must be non-negative!")
+    logger.info("Example test function executed successfully.")
+
+# Running example tests
+log_test_execution("Negative Parameter Test", example_test_function, -1)  # Expected to log an error
+log_test_execution("Positive Parameter Test", example_test_function, 1)   # Expected to log success
