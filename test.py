@@ -41,8 +41,118 @@ if __name__ == "__main__":
 
 
 
-I hope this email finds you in great spirits.
+from datetime import datetime
 
-I wanted to touch base with you regarding my upcoming vacation, which is set from April 22nd to May 3rd. During this time, I'll be traveling outside the country. I've made sure to mark these dates clearly on my Outlook calendar and have also shared this information with the team during our recent meetings.
+test_results = {
+    "happyPath": {"Data Validation": "Succeeded","Step Function Validation": "Succeeded", "DSet Validation": "Succeeded", "Notification Validation": "Succeeded", "DTF Validation": "Succeeded"},
+    "mismatch": {"Data Validation": "Succeeded", "DSet Validation": "Failed", "Notification Validation": "Not Run", "DTF Validation": "Error"},  # Example with "Error" status
+    "scanned": {"Data Validation": "Succeeded", "DSet Validation": "Succeeded", "Notification Validation": "Failed", "DTF Validation": "Not Run"},
+    "missingfile": {"Data Validation": "Failed", "DSet Validation": "Not Run", "Notification Validation": "Not Run", "DTF Validation": "Not Run"},
+    "missingcountfile": {"Data Validation": "Succeeded", "DSet Validation": "Failed", "Notification Validation": "Succeeded", "DTF Validation": "Not Run"},
+    #"multievent": {"Data Validation": "Succeeded", "DSet Validation": "Succeeded", "Notification Validation": "Succeeded", "DTF Validation": "Failed"}
+}
 
-Thank you for your support and understanding. I look forward to your confirmation of my leave dates.
+status_classes = {
+    "Succeeded": "succeeded",
+    "Failed": "failed",
+    "Not Run": "not-run"
+}
+# Your existing test_results and status_classes remain unchanged.
+
+html_template = """
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Test Automation Report</title>
+    <style>
+        :root {{
+            --success-color: #4CAF50;
+            --fail-color: #F44336;
+            --not-run-color: #9E9E9E;
+            --error-color: #FF9800; /* Color for Error status */
+            --background-color: #f2f2f2;
+        }}
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+        }}
+        .report-container {{
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 20px;
+        }}
+        .report-item {{
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }}
+        .report-item h2 {{
+            font-size: 20px;
+            margin-top: 0;
+        }}
+        .status {{
+            padding: 5px 10px;
+            color: white;
+            border-radius: 4px;
+            display: inline-block;
+            margin-top: 5px; /* Added margin for visual spacing between status items */
+        }}
+        .succeeded {{ background-color: var(--success-color); }}
+        .failed {{ background-color: var(--fail-color); }}
+        .not-run {{ background-color: var(--not-run-color); }}
+        .error {{ background-color: var(--error-color); }} /* Style for Error status */
+        .metadata {{
+            margin-top: 20px;
+            background: var(--background-color);
+            padding: 10px;
+            border-radius: 4px;
+        }}
+        .explanation {{
+            margin-top: 20px;
+            font-style: italic;
+        }}
+    </style>
+</head>
+<body>
+    <h1>Test Automation Report</h1>
+    <div class="metadata">
+        <p>Environment: Production</p>
+        <p>OS: Linux</p>
+        <p>Python Version: 3.8</p>
+        <p>Test Execution Timestamp: {timestamp}</p>
+    </div>
+    <div class="report-container">
+        {rows}
+    </div>
+    {multievent_explanation}
+</body>
+</html>
+"""
+
+def generate_html_report(test_results):
+    rows = ""
+    multievent_explanation = ""
+    for event, results in test_results.items():
+        row = f'<div class="report-item">\n<h2>{event}</h2>\n'
+        for step, status in results.items():
+            css_class = status_classes.get(status, "not-run")
+            row += f'<div class="status {css_class}">{step}: {status}</div>\n'
+        row += "</div>\n"
+        rows += row
+        if event == "multievent":
+            multievent_explanation = "<div class='explanation'>The 'multievent' encompasses various scenarios where multiple conditions are tested simultaneously.</div>"
+
+    current_timestamp = datetime.now().strftime('%Y%m%d')  # Updated as per your previous request
+    return html_template.format(timestamp=current_timestamp, rows=rows, multievent_explanation=multievent_explanation)
+
+# Generate HTML content
+html_content = generate_html_report(test_results)
+
+# Save this HTML content to a file
+with open("test_report.html", "w") as report_file:
+    report_file.write(html_content)
+
+print("HTML report generated successfully.")
+
