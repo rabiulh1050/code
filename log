@@ -1,0 +1,50 @@
+import logging
+import sys
+
+# Logger configuration module
+def configure_logging():
+    logger = logging.getLogger(__name__)
+    if not logger.hasHandlers():
+        logging.basicConfig(level=logging.ERROR, format='%(asctime)s - %(levelname)s - %(name)s - %(message)s')
+    return logger
+
+# Centralized logger instance for the module
+logger = configure_logging()
+
+def log_error(error: Exception, message: str = 'An error occurred', extra_data: dict = None, detailed_traceback: bool = False):
+    """
+    Logs detailed error information with customizable detail level and extra data.
+    """
+    log_message = f"{message}. Error: {str(error)}"
+    if detailed_traceback:
+        log_message += f". Traceback: {''.join(traceback.format_exception(None, error, error.__traceback__))}"
+
+    if extra_data:
+        logger.error(log_message, extra={'extra_data': extra_data})
+    else:
+        logger.error(log_message, exc_info=detailed_traceback)
+
+def log_success(operation: str, input_data: dict = None, output_data: dict = None, additional_info: dict = None):
+    """
+    Logs successful execution of an operation, including input and output data validation details.
+    """
+    parts = [f"Successful execution of {operation}"]
+    if input_data is not None:
+        parts.append(f"Input data: {input_data}")
+    if output_data is not None:
+        parts.append(f"Output data: {output_data}")
+    if additional_info is not None:
+        parts.append(f"Additional info: {additional_info}")
+    logger.info(" | ".join(parts))
+
+# Usage example
+def example_operation(input_value: int) -> int:
+    output_value = input_value * 2
+    is_valid_input = input_value > 0
+    is_valid_output = output_value > 0
+    if is_valid_input and is_valid_output:
+        log_success("example_operation", input_data={"input_value": input_value}, output_data={"output_value": output_value}, additional_info={"validation": "passed"})
+    return output_value
+
+example_input = 5
+example_operation(example_input)
