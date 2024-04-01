@@ -1,3 +1,14 @@
+
+
+
+def configure_logging():
+    extra_format = '%(asctime)s - %(levelname)s - %(name)s - %(message)s'
+    # Placeholder for potential extra data
+    extra_data_placeholder = ' %(extra_data)s'
+    logging.basicConfig(level=logging.ERROR, format=extra_format + extra_data_placeholder)
+
+
+
 import logging
 import sys
 
