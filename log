@@ -88,3 +88,75 @@ LEFT JOIN LN_CACHE ON LN_CACHE.FNM_LN_ID = LN_UWRG.FNM_LN_ID
 LEFT JOIN VALID_LN ON LN_UWRG.FNM_LN_ID = VALID_LN.FNM_LN_ID
 WHERE VALID_LN.FNM_LN_ID IS NULL;
 
+
+
+
+
+
+WITH DrvdMatch AS (
+    SELECT
+        UWRG.FNM_LN_ID,
+        TRIM(UWRG.AUTOD_UWRG_CASE_ID) AS AUTOD_UWRG_CASE_ID, -- Assuming TRIM is necessary here
+        UWRG.AUTOD_UWRG_SYS_TI,
+        UWRG.MD_SRC_SYS_LKUP_OBJ_ID
+    FROM
+        ${RS_IDS_SCHEMA_NM}.LN_UWRG UWRG
+    LEFT JOIN
+        ${RS_UCD_CIN_CARE_SCHEMA_NM}.ln_appl_du_drvd drvd ON UWRG.AUTOD_UWRG_CASE_ID = drvd.FNM_CFILE_ID
+    WHERE
+        UWRG.MD_SRC_SYS_LKUP_OBJ_ID = 9999
+        AND drvd.FNM_LN_ID IS NOT NULL -- Assuming we're ensuring a match exists
+),
+DataEnumLookup AS (
+    SELECT
+        MD_DATA_ENUM_LKUP_OBJ_ID,
+        TRIM(DATA_ENUM_TP) AS DATA_ENUM_TP -- Assuming TRIM is necessary
+    FROM
+        ${RS_IDS_SCHEMA_NM}.MD_DATA_ENUM_LKUP
+    WHERE
+        MD_SRC_SYS_LKUP_OBJ_ID = 9999
+),
+LatestSpst AS (
+    SELECT
+        TRIM(FNM_CFILE_ID) AS FNM_CFILE_ID, -- Assuming TRIM is necessary
+        TRAN_DIM_ID
+    FROM
+        ${RS_UCD_CIN_SCHEMA_NM}.LN_UCD_LTST_SPST_FACT
+    WHERE
+        EVNT_DTTM >= '2018-06-25'
+),
+FinsLfc AS (
+    SELECT
+        LN_LN.FNM_LN_ID,
+        NVL(LN_LN.AQSN_DT, LN_STC.NOTE_DT) AS LN_CUTOFF_DT
+    FROM
+        ${RS_IDS_SCHEMA_NM}.LN_LN LN_LN
+    LEFT JOIN
+        ${RS_IDS_SCHEMA_NM}.LN_STC LN_STC ON LN_LN.FNM_LN_ID = LN_STC.FNM_LN_ID
+    WHERE
+        LN_LN.MD_SRC_SYS_LKUP_OBJ_ID = 9999
+        AND LN_STC.MD_SRC_SYS_LKUP_OBJ_ID = 9999
+        AND EXISTS (
+            SELECT 1
+            FROM ${RS_IDS_SCHEMA_NM}.MD_DATA_ENUM_LKUP
+            WHERE
+                LN_STC.fins_lfc_ti = MD_DATA_ENUM_LKUP.md_data_enum_lkup_obj_id
+                AND DATA_ENUM_ATTR_NM = 'FINS_LFC_TI'
+                AND DATA_ENUM_TP = 'AtClosing'
+        )
+)
+SELECT
+    DM.FNM_LN_ID,
+    DM.AUTOD_UWRG_CASE_ID,
+    DM.AUTOD_UWRG_SYS_TI,
+    DEL.DATA_ENUM_TP,
+    LS.TRAN_DIM_ID,
+    FL.LN_CUTOFF_DT
+FROM
+    DrvdMatch DM
+JOIN
+    DataEnumLookup DEL ON DM.AUTOD_UWRG_SYS_TI = DEL.MD_DATA_ENUM_LKUP_OBJ_ID
+JOIN
+    LatestSpst LS ON DM.AUTOD_UWRG_CASE_ID = LS.FNM_CFILE_ID
+LEFT JOIN
+    FinsLfc FL ON DM.FNM_LN_ID = FL.FNM_LN_ID
