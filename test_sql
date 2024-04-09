@@ -28,3 +28,38 @@ FROM (
 ) AS SubQuery
 WHERE
     LRRM_SEQ_NO = 1;
+
+
+
+
+SELECT
+    LRRS.FNM_LN_ID,
+    LR.LN_REVW_ID,
+    CAST(LRRM.LN_REVW_RMDATN_LTR_CREN_TM AS TIMESTAMP) AS LN_REVW_RMDATN_LTR_CREN_TM,
+    CURRENT_USER AS REC_CREN_USR_ID,
+    CURRENT_TIMESTAMP AS REC_CREN_DITM
+FROM
+    (
+        SELECT
+            LRRS.FNM_LN_ID,
+            LR.LN_REVW_ID,
+            LRRM.LN_REVW_RMDATN_LTR_CREN_TM,
+            ROW_NUMBER() OVER (PARTITION BY LRRS.FNM_LN_ID ORDER BY LR.LN_REVW_ID DESC) AS LRRM_SEQ_NO
+        FROM
+            ${RS_IDS_SCHEMA_NM}.LN_REVW_REFL_SELN LRRS
+            JOIN ${RS_IDS_SCHEMA_NM}.LN_REVW LR ON LRRS.LN_REVW_ID = LR.LN_REVW_ID
+            JOIN ${RS_IDS_SCHEMA_NM}.LN_REVW_RMDATN LRRM ON LR.LN_REVW_ID = LRRM.LN_REVW_ID
+            JOIN ${RS_IDS_SCHEMA_NM}.MD_DATA_ENUM_LKUP LKUP ON LRRM.LN_REVW_RMDATN_LTR_TI = LKUP.MD_DATA_ENUM_LKUP_OBJ_ID
+        WHERE
+            LRRS.MD_SRC_SYS_LKUP_OBJ_ID IN (9999)
+            AND LKUP.DATA_ENUM_TP IN ('IndemnificationAgreement', 'RepurchaseAgreement', 'Repurchase', 'ReaffirmationFirst', 'ReaffirmationSecond', 'ReimbursementOfLosses', 'LoanQualityDefectNotice', 'RiskFreeAndRepurchaseAlternativeAgreement')
+            AND NOT EXISTS (
+                SELECT 1
+                FROM ${RS_IDS_SCHEMA_NM}.LN_REVW_RMDATN LRRM2
+                JOIN ${RS_IDS_SCHEMA_NM}.MD_DATA_ENUM_LKUP LKUP2 ON LRRM2.LN_REVW_RMDATN_LTR_TI = LKUP2.MD_DATA_ENUM_LKUP_OBJ_ID
+                WHERE LKUP2.DATA_ENUM_TP IN ('Rescission')
+                AND LRRM2.LN_REVW_ID = LRRM.LN_REVW_ID
+            )
+    ) AS SubQuery
+WHERE
+    LRRM_SEQ_NO = 1;
