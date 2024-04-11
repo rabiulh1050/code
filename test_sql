@@ -1,5 +1,5 @@
 SELECT
-    LRRS.FNM_LN_ID,
+    inner_LRRS.FNM_LN_ID,
     LR.LN_REVW_ID,
     CAST(LRRM.LN_REVW_RMDATN_LTR_CREN_TM AS TIMESTAMP) AS LN_REVW_RMDATN_LTR_CREN_TM
 FROM
@@ -13,14 +13,14 @@ FROM
             (
                 SELECT
                     FNM_LN_ID,
-                    LN_REVW_ID
+                    LN_REVW_ID,
+                    MD_SRC_SYS_LKUP_OBJ_ID  -- Include this column for join condition
                 FROM
                     (
                         SELECT
                             FNM_LN_ID,
                             LN_REVW_ID,
-                            LN_REVW_TI,
-                            MD_SRC_SYS_LKUP_OBJ_ID,
+                            MD_SRC_SYS_LKUP_OBJ_ID,  -- Make sure this is included in the innermost select
                             LN_REVW_SELN_DT,
                             DENSE_RANK() OVER (PARTITION BY FNM_LN_ID, LN_REVW_ID ORDER BY LN_REVW_SELN_DT DESC) AS SEQ
                         FROM ${RS_IDS_SCHEMA_NM}.LN_REVW_REFL_SELN
