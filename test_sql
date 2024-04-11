@@ -25,6 +25,7 @@ FROM (
                 LRRS.MD_SRC_SYS_LKUP_OBJ_ID IN (9999)
                 AND LRRS.LN_REVW_SELN_DT IS NOT NULL
                 AND LKUP.DATA_ENUM_TP NOT IN ('PostForeclosureReview')
+                AND LKUP.DATA_ENUM_TP IN ('IndemnificationAgreement', 'RepurchaseAgreement', 'Repurchase', 'ReaffirmationFirst', 'ReaffirmationSecond', 'ReimbursementOfLosses', 'LoanQualityDefectNotice', 'RiskFreeAndRepurchaseAlternativeAgreement')
         ) LRRS
     JOIN ${RS_IDS_SCHEMA_NM}.LN_REVW LR ON LRRS.LN_REVW_ID = LR.LN_REVW_ID
     JOIN ${RS_IDS_SCHEMA_NM}.LN_REVW_RMDATN LRRM ON LR.LN_REVW_ID = LRRM.LN_REVW_ID
