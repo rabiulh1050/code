@@ -12,58 +12,44 @@ FROM
         FROM
             (
                 SELECT
-                    LRRS.FNM_LN_ID,
-                    LRRS.LN_REVW_ID,
-                    LRRS.REC_CREN_TM,
-                    LRRS.LN_REVW_TI,
-                    LRRS.MD_SRC_SYS_LKUP_OBJ_ID,
-                    DENSE_RANK() OVER (PARTITION BY LRRS.FNM_LN_ID, LRRS.LN_REVW_ID ORDER BY LRRS.LN_REVW_SELN_DT DESC) AS SEQ
+                    FNM_LN_ID,
+                    LN_REVW_ID,
+                    LN_REVW_TI,
+                    MD_SRC_SYS_LKUP_OBJ_ID
                 FROM
-                    ${RS_IDS_SCHEMA_NM}.LN_REVW_REFL_SELN LRRS
-                JOIN
-                    (
-                        SELECT *
-                        FROM ${RS_IDS_SCHEMA_NM}.MD_DATA_ENUM_LKUP
-                        WHERE DATA_ENUM_TP NOT IN ('PostForeclosureReview')
-                    ) AS LKUP ON LKUP.MD_DATA_ENUM_LKUP_OBJ_ID = LRRS.LN_REVW_TI
+                    ${RS_IDS_SCHEMA_NM}.LN_REVW_REFL_SELN
                 WHERE
-                    LRRS.MD_SRC_SYS_LKUP_OBJ_ID = 9999
-                    AND LRRS.LN_REVW_SELN_DT IS NOT NULL
+                    MD_SRC_SYS_LKUP_OBJ_ID = 9999
+                    AND LN_REVW_SELN_DT IS NOT NULL
+                QUALIFY
+                    DENSE_RANK() OVER (PARTITION BY FNM_LN_ID, LN_REVW_ID ORDER BY LN_REVW_SELN_DT DESC) = 1
             ) AS LRRS
-        WHERE
-            LRRS.SEQ = 1
         JOIN
             ${RS_IDS_SCHEMA_NM}.LN_REVW LR ON LRRS.LN_REVW_ID = LR.LN_REVW_ID
         JOIN
             (
                 SELECT
-                    LRS.LN_REVW_ID,
-                    LRS.MD_SRC_SYS_LKUP_OBJ_ID,
-                    LRS.LN_REVW_STAT_CHG_TM,
-                    ROW_NUMBER() OVER (PARTITION BY LRS.LN_REVW_ID ORDER BY LRS.LN_REVW_STAT_CHG_TM DESC) AS LRS_SEQ_NO
+                    LN_REVW_ID,
+                    MD_SRC_SYS_LKUP_OBJ_ID
                 FROM
-                    ${RS_IDS_SCHEMA_NM}.LN_REVW_STAT LRS
-                JOIN
-                    ${RS_IDS_SCHEMA_NM}.MD_DATA_ENUM_LKUP LKUP ON LRS.LN_REVW_STAT_TI = LKUP.MD_DATA_ENUM_LKUP_OBJ_ID
+                    ${RS_IDS_SCHEMA_NM}.LN_REVW_STAT
                 WHERE
-                    LRS.MD_SRC_SYS_LKUP_OBJ_ID = 9999
-                    AND LRS_SEQ_NO = 1
-                    AND LKUP.DATA_ENUM_TP NOT IN ('ReviewClosed', 'ReviewCancelled')
+                    MD_SRC_SYS_LKUP_OBJ_ID = 9999
+                QUALIFY
+                    ROW_NUMBER() OVER (PARTITION BY LN_REVW_ID ORDER BY LN_REVW_STAT_CHG_TM DESC) = 1
             ) AS LRS ON LRRS.LN_REVW_ID = LRS.LN_REVW_ID AND LRRS.MD_SRC_SYS_LKUP_OBJ_ID = LRS.MD_SRC_SYS_LKUP_OBJ_ID
         JOIN
             (
                 SELECT
-                    LRRM.LN_REVW_ID,
-                    LRRM.MD_SRC_SYS_LKUP_OBJ_ID,
-                    LRRM.LN_REVW_RMDATN_LTR_CREN_TM,
-                    ROW_NUMBER() OVER (PARTITION BY LRRM.LN_REVW_ID ORDER BY LRRM.LN_REVW_RMDATN_LTR_CREN_TM) AS LRRM_FP_SEQ_NO
+                    LN_REVW_ID,
+                    LN_REVW_RMDATN_LTR_CREN_TM,
+                    MD_SRC_SYS_LKUP_OBJ_ID
                 FROM
-                    ${RS_IDS_SCHEMA_NM}.LN_REVW_RMDATN LRRM
-                JOIN
-                    ${RS_IDS_SCHEMA_NM}.MD_DATA_ENUM_LKUP LKUP ON LRRM.LN_REVW_RMDATN_LTR_TI = LKUP.MD_DATA_ENUM_LKUP_OBJ_ID
+                    ${RS_IDS_SCHEMA_NM}.LN_REVW_RMDATN
                 WHERE
-                    LRRM.MD_SRC_SYS_LKUP_OBJ_ID = 9999
-                    AND LKUP.DATA_ENUM_TP IN ('IndemnificationAgreement', 'RepurchaseAgreement', 'Repurchase', 'ReaffirmationFirst', 'ReaffirmationSecond', 'ReimbursementOfLosses', 'LoanQualityDefectNotice', 'RiskFreeAndRepurchaseAlternativeAgreement')
+                    MD_SRC_SYS_LKUP_OBJ_ID = 9999
+                QUALIFY
+                    ROW_NUMBER() OVER (PARTITION BY LN_REVW_ID ORDER BY LN_REVW_RMDATN_LTR_CREN_TM) = 1
             ) AS LRRM ON LRRM.LN_REVW_ID = LRS.LN_REVW_ID AND LRRM.MD_SRC_SYS_LKUP_OBJ_ID = LRS.MD_SRC_SYS_LKUP_OBJ_ID
         WHERE
             LRRM_SEQ_NO = 1
