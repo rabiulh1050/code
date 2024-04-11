@@ -5,29 +5,31 @@ SELECT
 FROM
     (
         SELECT
-            LRRS.FNM_LN_ID,
+            inner_LRRS.FNM_LN_ID,
             LR.LN_REVW_ID,
             LRRM.LN_REVW_RMDATN_LTR_CREN_TM,
-            ROW_NUMBER() OVER (PARTITION BY LRRS.FNM_LN_ID ORDER BY LR.LN_REVW_ID DESC) AS LRRM_SEQ_NO
+            ROW_NUMBER() OVER (PARTITION BY inner_LRRS.FNM_LN_ID ORDER BY LR.LN_REVW_ID DESC) AS LRRM_SEQ_NO
         FROM
             (
                 SELECT
                     FNM_LN_ID,
-                    LN_REVW_ID,
-                    REC_CREN_TM,
-                    LN_REVW_TI,
-                    MD_SRC_SYS_LKUP_OBJ_ID
+                    LN_REVW_ID
                 FROM
                     (
-                        SELECT *,
+                        SELECT
+                            FNM_LN_ID,
+                            LN_REVW_ID,
+                            LN_REVW_TI,
+                            MD_SRC_SYS_LKUP_OBJ_ID,
+                            LN_REVW_SELN_DT,
                             DENSE_RANK() OVER (PARTITION BY FNM_LN_ID, LN_REVW_ID ORDER BY LN_REVW_SELN_DT DESC) AS SEQ
                         FROM ${RS_IDS_SCHEMA_NM}.LN_REVW_REFL_SELN
                         WHERE MD_SRC_SYS_LKUP_OBJ_ID = 9999
                           AND LN_REVW_SELN_DT IS NOT NULL
-                    ) AS ranked_LRRS
+                    ) ranked_LRRS
                 WHERE ranked_LRRS.SEQ = 1
-            ) AS LRRS
-        JOIN ${RS_IDS_SCHEMA_NM}.LN_REVW LR ON LRRS.LN_REVW_ID = LR.LN_REVW_ID
+            ) inner_LRRS
+        JOIN ${RS_IDS_SCHEMA_NM}.LN_REVW LR ON inner_LRRS.LN_REVW_ID = LR.LN_REVW_ID
         JOIN
             (
                 SELECT
@@ -35,13 +37,15 @@ FROM
                     MD_SRC_SYS_LKUP_OBJ_ID
                 FROM
                     (
-                        SELECT *,
+                        SELECT
+                            LN_REVW_ID,
+                            MD_SRC_SYS_LKUP_OBJ_ID,
                             ROW_NUMBER() OVER (PARTITION BY LN_REVW_ID ORDER BY LN_REVW_STAT_CHG_TM DESC) AS RN
                         FROM ${RS_IDS_SCHEMA_NM}.LN_REVW_STAT
                         WHERE MD_SRC_SYS_LKUP_OBJ_ID = 9999
-                    ) AS filtered_LRS
+                    ) filtered_LRS
                 WHERE filtered_LRS.RN = 1
-            ) AS LRS ON LRRS.LN_REVW_ID = LRS.LN_REVW_ID AND LRRS.MD_SRC_SYS_LKUP_OBJ_ID = LRS.MD_SRC_SYS_LKUP_OBJ_ID
+            ) LRS ON inner_LRRS.LN_REVW_ID = LRS.LN_REVW_ID AND inner_LRRS.MD_SRC_SYS_LKUP_OBJ_ID = LRS.MD_SRC_SYS_LKUP_OBJ_ID
         JOIN
             (
                 SELECT
@@ -50,14 +54,17 @@ FROM
                     MD_SRC_SYS_LKUP_OBJ_ID
                 FROM
                     (
-                        SELECT *,
+                        SELECT
+                            LN_REVW_ID,
+                            LN_REVW_RMDATN_LTR_CREN_TM,
+                            MD_SRC_SYS_LKUP_OBJ_ID,
                             ROW_NUMBER() OVER (PARTITION BY LN_REVW_ID ORDER BY LN_REVW_RMDATN_LTR_CREN_TM) AS RN
                         FROM ${RS_IDS_SCHEMA_NM}.LN_REVW_RMDATN
                         WHERE MD_SRC_SYS_LKUP_OBJ_ID = 9999
-                    ) AS filtered_LRRM
+                    ) filtered_LRRM
                 WHERE filtered_LRRM.RN = 1
-            ) AS LRRM ON LRRM.LN_REVW_ID = LRS.LN_REVW_ID AND LRRM.MD_SRC_SYS_LKUP_OBJ_ID = LRS.MD_SRC_SYS_LKUP_OBJ_ID
-    ) AS LRMST
+            ) LRRM ON LRRM.LN_REVW_ID = LRS.LN_REVW_ID AND LRRM.MD_SRC_SYS_LKUP_OBJ_ID = LRS.MD_SRC_SYS_LKUP_OBJ_ID
+    ) LRMST
 WHERE
     LRMST.LRRM_SEQ_NO = 1
     AND NOT EXISTS
