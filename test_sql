@@ -108,3 +108,4 @@ FROM (
 ) LRMST
 WHERE
     LRRM_SEQ_NO = 1;
+
