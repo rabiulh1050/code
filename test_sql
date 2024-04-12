@@ -1,205 +1,76 @@
-WITH RankedLRRS AS (
-    SELECT
-        FNM_LN_ID,
-        LN_REVW_ID,
-        MD_SRC_SYS_LKUP_OBJ_ID,
-        LN_REVW_SELN_DT,
-        DENSE_RANK() OVER (PARTITION BY FNM_LN_ID, LN_REVW_ID ORDER BY LN_REVW_SELN_DT DESC) AS SEQ
-    FROM 
-        ${RS_IDS_SCHEMA_NM}.LN_REVW_REFL_SELN
-    WHERE 
-        MD_SRC_SYS_LKUP_OBJ_ID = 9999
-        AND LN_REVW_SELN_DT IS NOT NULL
-),
-FilteredLRRS AS (
-    SELECT
-        FNM_LN_ID,
-        LN_REVW_ID,
-        MD_SRC_SYS_LKUP_OBJ_ID
-    FROM RankedLRRS
-    WHERE SEQ = 1
-),
-RankedLRS AS (
-    SELECT
-        LN_REVW_ID,
-        MD_SRC_SYS_LKUP_OBJ_ID,
-        ROW_NUMBER() OVER (PARTITION BY LN_REVW_ID ORDER BY LN_REVW_STAT_CHG_TM DESC) AS RN
-    FROM 
-        ${RS_IDS_SCHEMA_NM}.LN_REVW_STAT
-    WHERE 
-        MD_SRC_SYS_LKUP_OBJ_ID = 9999
-),
-FilteredLRS AS (
-    SELECT
-        LN_REVW_ID,
-        MD_SRC_SYS_LKUP_OBJ_ID
-    FROM RankedLRS
-    WHERE RN = 1
-),
-RankedLRRM AS (
-    SELECT
-        LN_REVW_ID,
-        LN_REVW_RMDATN_LTR_CREN_TM,
-        MD_SRC_SYS_LKUP_OBJ_ID,
-        ROW_NUMBER() OVER (PARTITION BY LN_REVW_ID ORDER BY LN_REVW_RMDATN_LTR_CREN_TM) AS RN
-    FROM 
-        ${RS_IDS_SCHEMA_NM}.LN_REVW_RMDATN
-    WHERE 
-        MD_SRC_SYS_LKUP_OBJ_ID = 9999
-),
-FilteredLRRM AS (
-    SELECT
-        LN_REVW_ID,
-        LN_REVW_RMDATN_LTR_CREN_TM,
-        MD_SRC_SYS_LKUP_OBJ_ID
-    FROM RankedLRRM
-    WHERE RN = 1
-)
 SELECT
-    LRRS.FNM_LN_ID,
-    LR.LN_REVW_ID,
-    CAST(LRRM.LN_REVW_RMDATN_LTR_CREN_TM AS TIMESTAMP) AS LN_REVW_RMDATN_LTR_CREN_TM
+    FNM_LN_ID,
+    LN_REVW_ID,
+    CAST(LN_REVW_RMDATN_LTR_CREN_TM AS TIMESTAMP) AS LN_REVW_RMDATN_LTR_CREN_TM
 FROM
-    FilteredLRRS LRRS
-JOIN 
-    ${RS_IDS_SCHEMA_NM}.LN_REVW LR ON LRRS.LN_REVW_ID = LR.LN_REVW_ID
-JOIN
-    FilteredLRS LRS ON LRRS.LN_REVW_ID = LRS.LN_REVW_ID AND LRRS.MD_SRC_SYS_LKUP_OBJ_ID = LRS.MD_SRC_SYS_LKUP_OBJ_ID
-JOIN
-    FilteredLRRM LRRM ON LRRM.LN_REVW_ID = LRS.LN_REVW_ID AND LRRM.MD_SRC_SYS_LKUP_OBJ_ID = LRS.MD_SRC_SYS_LKUP_OBJ_ID
-WHERE 
-    NOT EXISTS
-        (
-            SELECT 1
-            FROM ${RS_IDS_SCHEMA_NM}.LN_REVW_RMDATN sub_LRRM
-            JOIN ${RS_IDS_SCHEMA_NM}.MD_DATA_ENUM_LKUP LKUP ON sub_LRRM.LN_REVW_RMDATN_LIR_TI = LKUP.MD_DATA_ENUM_LKUP_OBJ_ID
-            WHERE LKUP.DATA_ENUM_TP IN ('Rescission')
-        );
-
-
-
-
-
-
-
-
-
-
-
-
-
-select
-	FNM_LN_ID,
-	LN_REVW_ID,
-	cast (LN_REVW_RMDATN_LTR_CREN_TM as timestamp) as LN_REVW_RMDATN_LTR_CREN_TM
-from
-	(
-	select
-		LRRS.FNM_LN_ID,
-		LR.LN_REVW_ID,
-		LRRM.LN_REVW_RMDATN_LTR_CREN_TM,
-		row_number () over (partition by LRRS.FNM_LN_ID
-	order by
-		LR.LN_REVW_ID desc) LRRM_SEQ_NO
-	from
-		((
-		select
-			*
-		from
-			(
-			
-				select
-					LRRS.FNM_LN_ID,
-					LRRS.LN_REVW_ID,
-					LRRS.REC_CREN_TM,
-					LRRS.LN_REVW_TI,
-					LRRS.MD_SRC_SYS_LKUP_OBJ_ID,
-					dense_rank () over (partition by LRRS.FNM_LN_ID,
-					LRRS.LN_REVW_ID
-				order by
-					LRRS.LN_REVW_SELN_DT desc) as SEQ
-				from
-					${RS_IDS_SCHEMA_NM}.LN_REVW_REFL_SELN LRRS
-				join (
-					select
-						*
-					from
-						${RS_IDS_SCHEMA_NM}.MD_DATA_ENUM_LKUP LKUP
-					where
-						DATA_ENUM_TP not in ('PostForeclosureReview') )LKUP
-on
-					LKUP.MD_DATA_ENUM_LKUP_OBJ_ID = LRRS.LN_REVW_TI
-				where
-					LRRS.MD_SRC_SYS_LKUP_OBJ_ID in (9999)
-					and LRRS.LN_REVW_SELN_DT is not null
-				order by
-					FNM_LN_ID) LRRS
-		where
-			SEQ = 1) LRRS
-	join ${RS_IDS_SCHEMA_NM}.LN_REVW LR on
-		LRRS.LN_REVW_ID = LR.LN_REVW_ID
-	join (
-		select
-			*
-		from
-			(
-			select
-				LRS.*,
-				dense_rank () over (partition by LRS.LN_REVW_ID
-			order by
-				LRS.LN_REVW_STAT_CHG_TM desc) LRS_SEQ_NO
-			from
-				${RS_IDS_SCHEMA_NM}.LN_REVW_STAT LRS
-			where
-				LRS.MD_SRC_SYS_LKUP_OBJ_ID in (9999)) LRS
-		join ${RS_IDS_SCHEMA_NM}.MD_DATA_ENUM_LKUP LKUP
-on
-			LRS.LN_REVW_STAT_TI = LKUP.MD_DATA_ENUM_LKUP_OBJ_ID
-		where
-			LRS.MD_SRC_SYS_LKUP_OBJ_ID in (9999)
-				and LRS.IRS_SEQ_no = 1
-				and LKUP.MD_DATA_ENUM_TP not in ('ReviewClosed', 'ReviewCancelled' ) ) LRS
-
-on
-		LRRS.LN_REVW_ID = LRS.LN_REVW_ID
-		and LRRS.MD_SRC_SYS_LKUP_OBJ_ID = LRS.MD_SRC_SYS_LKUP_OBJ_ID
-	join (
-		select
-			*
-		from
-			(
-			select
-				LRRM.LN_REVW_ID,
-				LRRM.LN_REVW_RMDATN_LTR_TI,
-				LRRM.MD_SRC_SYS_LKUP_OBJ_ID,
-				LKUP.MD_DATA_ENUM_TP,
-				LRRM.LN_REVW_RMDATN_LTR_CREN_TM,
-				row_number() over (partition by LRRM.LN_REVW_ID
-			order by
-				LRRM.LN_REVW_RMDATN_LTR_CREN_TM) as LRRM_FP_SEQ_NO
-			from
-				${RS_IDS_SCHEMA_NM}.LN_REVW_RMDATN LRRM
-			join ${RS_IDS_SCHEMA_NM}.MD_DATA_ENUM_LKUP LKUP
-	on
-				LRRM.LN_REVW_RMDATN_LTR_TI = LKUP.MD_DATA_ENUM_LKUP_OBJ_ID
-			where
-				LRRM.MD_SRC_SYS_LKUP_OBJ_ID in (9999)
-					and LKUP.DATA_ENUM_TP in ('IndemnificationAreement', 'RepurchaseAareement', 'Repurchase', 'ReaffirmationFirst', 'ReaffirmationSecond', 'ReimbursementOfLosses', 'LoanQualityDefectNotice', 'RiskFree AndRepurchaseAlternativeAgrement')) LRRM_FP
-		where
-			LRRM_FP.LRRM_FP_SEQ_NO = 1) LRRM 
-	
-on
-		LRRM.LN_REVW_ID = LRS.LN_REVW_ID
-		and LRRM.MD_SRC_SYS_LKUP_OBJ_ID = LRS.MD_SRC_SYS_LKUP_OBJ_ID)
-	where
-		not exist(
-		select
-			1
-		from
-			${RS_IDS_SCHEMA_NM}.LN_REVW_RMDATN LRRM
-		join ${RS_IDS_SCHEMA_NM}.MD_DATA_ENUM_LKUP LKUP
-on
-			LRRM.LN_REVW_RMDATN_LIR_TI = LKUP.MD_DATA_ENUM_LKUP_OBJ_ID
-			and LKUP.DATA_ENUM_TP in ('Rescission'))) LRMST
-where
-	LRRM_SEQ_NO = 1;
+    (
+        SELECT
+            LRRS.FNM_LN_ID,
+            LR.LN_REVW_ID,
+            LRRM.LN_REVW_RMDATN_LTR_CREN_TM,
+            ROW_NUMBER() OVER (PARTITION BY LRRS.FNM_LN_ID ORDER BY LR.LN_REVW_ID DESC) AS LRRM_SEQ_NO
+        FROM
+            (
+                SELECT
+                    LRRS.FNM_LN_ID,
+                    LRRS.LN_REVW_ID,
+                    LRRS.REC_CREN_TM,
+                    LRRS.LN_REVW_TI,
+                    LRRS.MD_SRC_SYS_LKUP_OBJ_ID,
+                    LRRS.LN_REVW_SELN_DT,
+                    DENSE_RANK() OVER (PARTITION BY LRRS.FNM_LN_ID, LRRS.LN_REVW_ID ORDER BY LRRS.LN_REVW_SELN_DT DESC) AS SEQ
+                FROM
+                    ${RS_IDS_SCHEMA_NM}.LN_REVW_REFL_SELN LRRS
+                JOIN
+                    (
+                        SELECT *
+                        FROM ${RS_IDS_SCHEMA_NM}.MD_DATA_ENUM_LKUP
+                        WHERE DATA_ENUM_TP NOT IN ('PostForeclosureReview')
+                    ) LKUP ON LKUP.MD_DATA_ENUM_LKUP_OBJ_ID = LRRS.LN_REVW_TI
+                WHERE
+                    LRRS.MD_SRC_SYS_LKUP_OBJ_ID = 9999
+                    AND LRRS.LN_REVW_SELN_DT IS NOT NULL
+            ) LRRS
+        WHERE
+            SEQ = 1
+        JOIN
+            ${RS_IDS_SCHEMA_NM}.LN_REVW LR ON LRRS.LN_REVW_ID = LR.LN_REVW_ID
+        JOIN
+            (
+                SELECT
+                    LRS.LN_REVW_ID,
+                    LRS.MD_SRC_SYS_LKUP_OBJ_ID,
+                    DENSE_RANK() OVER (PARTITION BY LRS.LN_REVW_ID ORDER BY LRS.LN_REVW_STAT_CHG_TM DESC) AS LRS_SEQ_NO
+                FROM
+                    ${RS_IDS_SCHEMA_NM}.LN_REVW_STAT LRS
+                JOIN
+                    ${RS_IDS_SCHEMA_NM}.MD_DATA_ENUM_LKUP LKUP ON LRS.LN_REVW_STAT_TI = LKUP.MD_DATA_ENUM_LKUP_OBJ_ID
+                WHERE
+                    LRS.MD_SRC_SYS_LKUP_OBJ_ID = 9999
+                    AND LKUP.DATA_ENUM_TP NOT IN ('ReviewClosed', 'ReviewCancelled')
+            ) LRS ON LRRS.LN_REVW_ID = LRS.LN_REVW_ID AND LRRS.MD_SRC_SYS_LKUP_OBJ_ID = LRS.MD_SRC_SYS_LKUP_OBJ_ID AND LRS.LRS_SEQ_NO = 1
+        JOIN
+            (
+                SELECT
+                    LRRM.LN_REVW_ID,
+                    LRRM.LN_REVW_RMDATN_LTR_TI,
+                    LRRM.MD_SRC_SYS_LKUP_OBJ_ID,
+                    LRRM.LN_REVW_RMDATN_LTR_CREN_TM,
+                    ROW_NUMBER() OVER (PARTITION BY LRRM.LN_REVW_ID ORDER BY LRRM.LN_REVW_RMDATN_LTR_CREN_TM DESC) AS LRRM_FP_SEQ_NO
+                FROM
+                    ${RS_IDS_SCHEMA_NM}.LN_REVW_RMDATN LRRM
+                JOIN
+                    ${RS_IDS_SCHEMA_NM}.MD_DATA_ENUM_LKUP LKUP ON LRRM.LN_REVW_RMDATN_LTR_TI = LKUP.MD_DATA_ENUM_LKUP_OBJ_ID
+                WHERE
+                    LRRM.MD_SRC_SYS_LKUP_OBJ_ID = 9999
+                    AND LKUP.DATA_ENUM_TP IN ('IndemnificationAgreement', 'RepurchaseAgreement', 'Repurchase', 'ReaffirmationFirst', 'ReaffirmationSecond', 'ReimbursementOfLosses', 'LoanQualityDefectNotice', 'RiskFreeAndRepurchaseAlternativeAgreement')
+            ) LRRM ON LRRM.LN_REVW_ID = LRS.LN_REVW_ID AND LRRM.MD_SRC_SYS_LKUP_OBJ_ID = LRS.MD_SRC_SYS_LKUP_OBJ_ID AND LRRM.LRRM_FP_SEQ_NO = 1
+    ) sub
+WHERE
+    LRRM_SEQ_NO = 1
+    AND NOT EXISTS (
+        SELECT 1
+        FROM ${RS_IDS_SCHEMA_NM}.LN_REVW_RMDATN LRRM
+        JOIN ${RS_IDS_SCHEMA_NM}.MD_DATA_ENUM_LKUP LKUP ON LRRM.LN_REVW_RMDATN_LIR_TI = LKUP.MD_DATA_ENUM_LKUP_OBJ_ID
+        WHERE LKUP.DATA_ENUM_TP IN ('Rescission')
+    );
