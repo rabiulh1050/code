@@ -42,3 +42,73 @@ LEFT JOIN (
 ) DU_VND_SPST ON LN_UWRG.FNM_LN_ID = DU_VND_SPST.FNM_LN_ID
 WHERE 
     DU_VND_SPST.FNM_LN_ID IS NULL;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+SELECT
+    a.FNM_LN_ID,
+    a.AUTOD_UWRG_CASE_ID,
+    a.CFILE_SMSS_ID,
+    a.AUTOD_UWRG_SYS_TI,
+    a.DATA_ENUM_TP,
+    a.LN_CUTOFF_DT,
+    a.CFILE_SMSS_OBJ_ID,
+    a.LN_CLSNG_CTCL_FBRWR_AMT,
+    a.LN_CLSNG_CTCL_TBRWR_AMT,
+    a.LN_ESTD_CLSNG_COST_EXP_AMT,
+    a.LN_AUTOD_UWRG_SELR_CTBN_AMT,
+    a.BRWR_GRP_TOT_MTHY_HSNG_EXP_AMT,
+    a.BRWR_GRP_TOT_PRPSD_MHEXP_AMT,
+    a.LN_TOT_SBOR_FNCN_AMT,
+    a.LN_APPL_BRWR_OBJ_ID,
+    -- Add other fields as needed
+FROM (
+    SELECT
+        di.FNM_LN_ID,
+        di.AUTOD_UWRG_CASE_ID,
+        di.CFILE_SMSS_ID,
+        di.AUTOD_UWRG_SYS_TI,
+        di.DATA_ENUM_TP,
+        di.LN_CUTOFF_DT,
+        ast.CFILE_SMSS_OBJ_ID,
+        CAST(ast.LN_CLSNG_CTCL_FBRWR_AMT AS NUMERIC) AS LN_CLSNG_CTCL_FBRWR_AMT,
+        -- Add other fields and casts as needed
+    FROM
+        LN_DUFILE_ID di
+    LEFT JOIN (
+        SELECT
+            ast.BRWR_APPLT_ID,
+            ast.BRWR_AST_NO,
+            ast.BRWR_AST_CASH_OR_MRKT_VAL_AMT,
+            ast.FNM_CFILE_ID AS LABA_FNM_CFILE_ID,
+            ast.CFILE_SMSS_ID AS LABA_CFILE_SMSS_ID,
+            del.DATA_ENUM_TYP AS BRWR_AST_TYP
+        FROM
+            ${RS_DU_CRS_SCHEMA_NM}.LN_APPL_BRWR_AST ast
+        JOIN ${RS_DU_CIN_SCHEMA_NM}.LN_APPL_BRWR brwr
+            ON brwr.BRWR_APPLT_ID = ast.BRWR_APPLT_ID
+            AND brwr.FNM_CFILE_ID = ast.FNM_CFILE_ID
+            AND brwr.CFILE_SMSS_ID = ast.CFILE_SMSS_ID
+        LEFT JOIN DATA_ENUM_LKUP del
+            ON del.SRC_SYS_DATA_ENUM_LKUP_OBJ_ID = ast.BRWR_AST_TYP_OBJ_ID
+    ) ast ON di.AUTOD_UWRG_CASE_ID = ast.LABA_FNM_CFILE_ID
+        AND di.CFILE_SMSS_ID = ast.LABA_CFILE_SMSS_ID
+) a
+WHERE
+    a.LN_APPL_BRWR_AST_OBJ_ID IS NOT NULL;
+
+
+
+
+
