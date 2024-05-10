@@ -1,0 +1,276 @@
+The provided SQL query seems quite complex with multiple nested subqueries and joins. I've cleaned up some formatting, simplified the logic where possible, and added comments for better readability. Here is the updated version:
+
+```sql
+SELECT 
+    LN_REVW_LQDN_SPST.LN_REVW_ST_SPST_OBJ_ID,
+    LN_REVW_LQDN_SPST.FNM_LN_ID,
+    LN_REVW_LQDN_SPST.LN_REVW_ID,
+    CAST(LN_REVW_LQDN_SPST.BUS_EVNT_TM AS TIMESTAMP),
+    CAST(LN_REVW_LQDN_SPST.ACVY_RPTG_PRD_DT AS TIMESTAMP),
+    'IDS' AS SRC_SYS_INFC_NME_TYP,
+    'AsDelivered' AS LN_REVW_ST_TYP,
+    LN_REVW_LQDN_SPST.BUS_EVNT_REVL_IC,
+    LN_REVW_LQDN_SPST.LN_ACTN_TYP,
+    LN_REVW_LQDN_SPST.LN_ACTN_CD,
+    LN_REVW_LQDN_SPST.LQDD_UPB_AM,
+    CAST(LN_REVW_LQDN_SPST.LQDN_EVNT_ACTN_DT AS TIMESTAMP),
+    LN_REVW_LQDN_SPST.ACVY_RPTG_PRD,
+    ${RS_BATCH_ID} AS BATCH_OBJ_ID,
+    'N' AS DWH_REC_DEL_IND,
+    USER AS DWH_REC_CREN_USR_ID,
+    CURRENT_TIMESTAMP AS DWH_REC_CREN_DTTM,
+    USER AS DWH_REC_CREN_USR_ID,
+    CURRENT_TIMESTAMP AS DWH_REC_LAST_UPDD_DTTM,
+    LN_REVW_LQDN_SPST.LN_ACTN_TYP_REF_VAL_CD,
+    LN_REVW_LQDN_SPST.LN_PREM_DISC_RPURD_AMT,
+    LN_REVW_LQDN_SPST.LN_ACTL_UPB_AMT,
+    LN_REVW_LQDN_SPST.LN_TOT_LNDR_PASS_THRU_INT_AMT,
+    LN_REVW_LQDN_SPST.LN_REVW_SRC_SYS_EVNT_NME_TYP
+FROM (
+    -- Fetch 9999 (which is RM) if available, else fetch 7777 if liquidated
+    SELECT 
+        LN_REVW_ST_SPST_OBJ_ID,
+        FNM_LN_ID,
+        LN_REVW_ID,
+        CAST(BUS_EVNT_TM AS TIMESTAMP),
+        CAST(ACVY_RPTG_PRD_DT AS TIMESTAMP),
+        BUS_EVNT_REVL_IC,
+        LN_ACTN_TYP,
+        LN_ACTN_CD,
+        LQDD_UPB_AM,
+        CAST(LQDN_EVNT_ACTN_DT AS TIMESTAMP),
+        ACVY_RPTG_PRD,
+        'N' AS DWH_REC_DEL_IND,
+        LN_ACTN_TYP_REF_VAL_CD,
+        LN_PREM_DISC_RPURD_AMT,
+        LN_ACTL_UPB_AMT,
+        LN_TOT_LNDR_PASS_THRU_INT_AMT,
+        MD_SRC_SYS_LKUP_OBJ_ID,
+        LN_REVW_SRC_SYS_EVNT_NME_TYP,
+        DENSE_RANK() OVER (PARTITION BY FNM_LN_ID ORDER BY MD_SRC_SYS_LKUP_OBJ_ID DESC NULLS LAST) AS RKN
+    FROM (
+        -- UNION result set of 9999 and 7007 
+        (
+            -- Result set of 9999
+            WITH MD_DATA_ENUM AS (
+                SELECT 
+                    DATA_ENUM_TP,
+                    DATA_ENUM_ED,
+                    MD_DATA_ENUM_LKUP_OBJ_ID,
+                    DATA_ENUM_ATTR_NM
+                FROM ${RS_IDS_SCHEMA_NM}.MD_DATA_ENUM_LKUP AS MD_DATA_ENUM_LKUP_VW1
+                WHERE 
+                    MD_DATA_ENUM_LKUP_VW1.DATA_ENUM_ATTR_NM IN ('LPPPRDC_TI')
+                    AND MD_DATA_ENUM_LKUP_VW1.DATA_ENUM_TP = 'ReverseMortgage'
+            )
+            SELECT 
+                LN_REVW_ST_SPST.LN_REVW_ST_SPST_OBJ_ID,
+                LN_REVW_ST_SPST.FNM_LN_ID,
+                LN_REVW_ST_SPST.LN_REVW_ID,
+                CAST(LN_LQDN_VW1.BUS_EVNT_TM AS TIMESTAMP),
+                CAST(LN_LQDN_VW1.ACVY_RPTG_PRD_DT AS TIMESTAMP),
+                LN_LQDN_VW1.BUS_EVNT_REVL_IC,
+                ACTN_TI AS LN_ACTN_TYP,
+                CAST(LN_LQDN_VW1.ACTN_TI AS NUMERIC) AS LN_ACTN_CD,
+                LN_LQDN_VW1.LQDD_UPB_AM,
+                CAST(LN_LQDN_VW1.LQDN_EVNT_ACTN_DT AS TIMESTAMP),
+                LN_LQDN_VW1.ACVY_RPTG_PRD,
+                NULL AS LN_ACTN_TYP_REF_VAL_CD,
+                LN_LQDN_VW1.PDSC_RPURD_AM AS LN_PREM_DISC_RPURD_AMT,
+                LN_LQDN_VW1.ACTL_UPB_AM AS LN_ACTL_UPB_AMT,
+                LN_LQDN_VW1.TOT_LPTI_AM AS LN_TOT_LNDR_PASS_THRU_INT_AMT,
+                LN_LQDN_VW1.MD_SRC_SYS_LKUP_OBJ_ID,
+                LN_REVW_REFL_SELN_SPST.LN_REVW_SRC_SYS_EVNT_NME_TYP
+            FROM ${RS_CONV_TGT_DIM_SCHEMA_NM}.LN_REVW_REFL_SELN_SPST LN_REVW_REFL_SELN_SPST
+            JOIN ${RS_CONV_TGT_DIM_SCHEMA_NM}.LN_REVW_ST_SPST LN_REVW_ST_SPST 
+                ON LN_REVW_ST_SPST.LN_REVW_ID = LN_REVW_REFL_SELN_SPST.LN_REVW_ID 
+                AND LN_REVW_ST_SPST.FNM_LN_ID = LN_REVW_REFL_SELN_SPST.FNM_LN_ID
+                AND LN_REVW_ST_SPST.SRC_SYS_INFC_NME_TYP = 'IDS'
+                AND LN_REVW_REFL_SELN_SPST.EVNT_NME_CD NOT IN ('3001','3002','3011','3030')
+            JOIN (
+                SELECT 
+                    LN_LQDN1.FNM_LN_ID,
+                    CAST(LN_LQDN1.BUS_EVNT_TM AS TIMESTAMP),
+                    LN_LQDN1.ACVY_RPTG_PRD,
+                    CAST(LN_LQDN1.ACVY_RPTG_PRD_DT AS TIMESTAMP),
+                    LN_LQDN1.BUS_EVNT_REVL_IC,
+                    LN_LQDN1.ACTN_TI,
+                    LN_LQDN1.LPPPRDC_TI,
+                    LN_LQDN1.LQDD_UPB_AM,    
+                    CAST(LN_LQDN1.LQDN_EVNT_ACTN_DT AS TIMESTAMP),
+                    LN_LQDN1.PDSC_RPURD_AM,
+                    LN_LQDN1.ACTL_UPB_AM,
+                    LN_LQDN1.TOT_LPTI_AM,
+                    LN_LQDN1.MD_SRC_SYS_LKUP_OBJ_ID,
+                    LN_LQDN1.SEQ
+                FROM (
+                    SELECT 
+                        LN_LQDN_VW1.FNM_LN_ID,
+                        CAST(LN_LQDN_VW1.BUS_EVNT_TM AS TIMESTAMP),
+                        LN_LQDN_VW1.ACVY_RPTG_PRD,
+                        CAST(LN_LQDN_VW1.ACVY_RPTG_PRD_DT AS TIMESTAMP),
+                        LN_LQDN_VW1.BUS_EVNT_REVL_IC,
+                        NULL AS ACTN_TI,
+                        LN_STC_VW1.LPPPRDC_TI,
+                        LN_LQDN_VW1.LQDD_UPB_AM,
+                        CAST(LN_LQDN_VW1.LQDN_EVNT_ACTN_DT AS TIMESTAMP),
+                        LN_LQDN_VW1.PDSC_RPURD_AM,
+                        LN_LQDN_VW1.ACTL_UPB_AM,
+                        LN_LQDN_VW1.TOT_LPTI_AM,
+                        LN_LQDN_VW1.MD_SRC_SYS_LKUP_OBJ_ID,
+                        DENSE_RANK() OVER (PARTITION BY LN_LQDN_VW1.FNM_LN_ID, LN_LQDN_VW1.ACVY_RPTG_PRD ORDER BY LN_LQDN_VW1.BUS_EVNT_TM DESC NULLS LAST) AS SEQ
+                    FROM ${RS_IDS_SCHEMA_NM}.LN_LQDN AS LN_LQDN_VW1
+                    LEFT JOIN ${RS_IDS_SCHEMA_NM}.LN_STC AS LN_STC_VW1
+                        ON LN_LQDN_VW1.MD_SRC_SYS_LKUP_OBJ_ID = 9999
+                        AND LN_LQDN_VW1.FNM_LN_ID = LN_STC_VW1.FNM_LN_ID
+                        AND LN_STC_VW1.MD_SRC_SYS_LKUP_OBJ_ID = 9999
+                ) AS LN_LQDN1   
+                WHERE LN_LQDN1.SEQ = 1
+            ) AS LN_LQDN_VW1
+            ON LN_LQDN_VW1.FNM_LN_ID = LN_REVW_REFL_SELN_SPST.FNM_LN_ID
+            JOIN MD_DATA_ENUM AS MD2
+                ON MD2.MD_DATA_ENUM_LKUP_OBJ_ID = LN_LQDN_VW1.LPPPRDC_TI
+                AND MD2.DATA_ENUM_ATTR_NM = 'LPPPRDC_TI'
+        )
+        UNION
+        ( 
+            -- Result set 7007
+            WITH LN_LQDN_RE
+
+VL_MAX_BUS_REC AS (
+                SELECT 
+                    LN_LQDN_REVL1.FNM_LN_ID, 
+                    CAST(LN_LQDN_REVL1.BUS_EVNT_TM AS TIMESTAMP) 
+                FROM (
+                    SELECT 
+                        FNM_LN_ID, 
+                        BUS_EVNT_TM, 
+                        DENSE_RANK() OVER (PARTITION BY FNM_LN_ID ORDER BY BUS_EVNT_TM DESC NULLS LAST) AS SEQ 
+                    FROM ${RS_IDS_SCHEMA_NM}.LN_LQDN_REVL AS LN_LQDN_REVL_VW1 
+                    WHERE MD_SRC_SYS_LKUP_OBJ_ID IN (7007)
+                ) AS LN_LQDN_REVL1 
+                WHERE LN_LQDN_REVL1.SEQ = 1
+            ),
+            LN_RISTMT_MAX_BUS_REC AS (
+                SELECT 
+                    LN_RISTMT1.FNM_LN_ID, 
+                    CAST(LN_RISTMT1.BUS_EVNT_TM AS TIMESTAMP) 
+                FROM (
+                    SELECT 
+                        FNM_LN_ID, 
+                        BUS_EVNT_TM, 
+                        DENSE_RANK() OVER (PARTITION BY FNM_LN_ID ORDER BY BUS_EVNT_TM DESC NULLS LAST) AS SEQ 
+                    FROM ${RS_IDS_SCHEMA_NM}.LN_RISTMT AS LN_RISTMT_VW1 
+                    WHERE MD_SRC_SYS_LKUP_OBJ_ID IN (9999)
+                ) AS LN_RISTMT1 
+                WHERE LN_RISTMT1.SEQ = 1
+            )
+            SELECT 
+                LN_REVW_ST_SPST_OBJ_ID,
+                FNM_LN_ID,
+                LN_REVW_ID,
+                CAST(BUS_EVNT_TM AS TIMESTAMP),
+                CAST(ACVY_RPTG_PRD_DT AS TIMESTAMP),
+                BUS_EVNT_REVL_IC,
+                LN_ACTN_TYP,
+                CAST(LN_ACTN_CD AS NUMERIC),
+                LQDD_UPB_AM,
+                CAST(LQDN_EVNT_ACTN_DT AS TIMESTAMP),
+                ACVY_RPTG_PRD,
+                LN_ACTN_TYP_REF_VAL_CD,
+                LN_PREM_DISC_RPURD_AMT,
+                LN_ACTL_UPB_AMT,
+                LN_TOT_LNDR_PASS_THRU_INT_AMT,
+                MD_SRC_SYS_LKUP_OBJ_ID,
+                LN_REVW_SRC_SYS_EVNT_NME_TYP 
+            FROM (
+                SELECT 
+                    LN_LQDN_LTST.*,
+                    CASE 
+                        WHEN (
+                            (DATE(LN_LQDN_LTST.BUS_EVNT_TM) > DATE(LN_LQDN_REVL_MAX_BUS_REC.BUS_EVNT_TM) OR LN_LQDN_REVL_MAX_BUS_REC.BUS_EVNT_TM IS NULL)
+                            AND (DATE(LN_LQDN_LTST.BUS_EVNT_TM) > DATE(LN_RISTMT_MAX_BUS_REC.BUS_EVNT_TM) OR LN_RISTMT_MAX_BUS_REC.BUS_EVNT_TM IS NULL)
+                        ) THEN 'Y' 
+                    END AS Comp
+                FROM (
+                    SELECT 
+                        LN_REVW_ST_SPST_OBJ_ID,
+                        FNM_LN_ID,
+                        LN_REVW_ID,
+                        CAST(BUS_EVNT_TM AS TIMESTAMP),
+                        CAST(ACVY_RPTG_PRD_DT AS TIMESTAMP),
+                        BUS_EVNT_REVL_IC,
+                        LN_ACTN_TYP,
+                        ACTN_TI AS LN_ACTN_CD,
+                        LQDD_UPB_AM,
+                        CAST(LQDN_EVNT_ACTN_DT AS TIMESTAMP),
+                        ACVY_RPTG_PRD,
+                        LN_ACTN_TYP_REF_VAL_CD,
+                        PDSC_RPURD_AM AS LN_PREM_DISC_RPURD_AMT,
+                        ACTL_UPB_AM AS LN_ACTL_UPB_AMT,
+                        TOT_LPTI_AM AS LN_TOT_LNDR_PASS_THRU_INT_AMT,
+                        MD_SRC_SYS_LKUP_OBJ_ID,
+                        LN_REVW_SRC_SYS_EVNT_NME_TYP
+                    FROM (
+                        SELECT DISTINCT 
+                            LN_LQDN_VW1.FNM_LN_ID,
+                            LN_LQDN_VW1.BUS_EVNT_TM,
+                            LN_LQDN_VW1.ACVY_RPTG_PRD,
+                            LN_LQDN_VW1.ACVY_RPTG_PRD_DT,
+                            LN_LQDN_VW1.BUS_EVNT_REVL_IC,
+                            LN_LQDN_VW1.ACTN_TI,
+                            NULL AS LPPPRDC_TI,
+                            LN_LQDN_VW1.LQDD_UPB_AM,
+                            LN_LQDN_VW1.LQDN_EVNT_ACTN_DT,
+                            LN_LQDN_VW1.PDSC_RPURD_AM,
+                            LN_LQDN_VW1.ACTL_UPB_AM,
+                            LN_LQDN_VW1.TOT_LPTI_AM,
+                            LN_LQDN_VW1.MD_SRC_SYS_LKUP_OBJ_ID,
+                            LN_REVW_ST_SPST.LN_REVW_ST_SPST_OBJ_ID,
+                            LN_REVW_ST_SPST.LN_REVW_ID,
+                            LN_REVW_REFL_SELN_SPST.LN_REVW_SRC_SYS_EVNT_NME_TYP,
+                            MD1.DATA_ENUM_TP AS LN_ACTN_TYP,
+                            MD1.DATA_ENUM_ED AS LN_ACTN_TYP_REF_VAL_CD,
+                            DENSE_RANK() OVER (PARTITION BY LN_LQDN_VW1.FNM_LN_ID ORDER BY BUS_EVNT_TM DESC NULLS LAST) AS SEQ
+                        FROM ${RS_IDS_SCHEMA_NM}.LN_LQDN AS LN_LQDN_VW1
+                        JOIN ${RS_CONV_TGT_DIM_SCHEMA_NM}.LN_REVW_REFL_SELN_SPST LN_REVW_REFL_SELN_SPST
+                            ON LN_REVW_REFL_SELN_SPST.FNM_LN_ID = LN_LQDN_VW1.FNM_LN_ID
+                        JOIN ${RS_CONV_TGT_DIM_SCHEMA_NM}.LN_REVW_ST_SPST LN_REVW_ST_SPST 
+                            ON LN_REVW_ST_SPST.LN_REVW_ID = LN_REVW_REFL_SELN_SPST.LN_REVW_ID 
+                            AND LN_REVW_ST_SPST.FNM_LN_ID = LN_REVW_REFL_SELN_SPST.FNM_LN_ID
+                            AND LN_REVW_ST_SPST.SRC_SYS_INFC_NME_TYP = 'IDS'
+                            AND LN_REVW_REFL_SELN_SPST.EVNT_NME_CD NOT IN ('3001','3002','3011','3030')
+                        LEFT JOIN (
+                            SELECT 
+                                DATA_ENUM_TP,
+                                DATA_ENUM_ED,
+                                MD_DATA_ENUM_LKUP_OBJ_ID,
+                                DATA_ENUM_ATTR_NM
+                            FROM ${RS_IDS_SCHEMA_NM}.MD_DATA_ENUM_LKUP AS MD_DATA_ENUM_LKUP_VW1
+                            WHERE MD_DATA_ENUM_LKUP_VW1.DATA_ENUM_ATTR_NM IN ('ACTN_TI')
+                        ) AS MD1
+                            ON MD1.MD_DATA_ENUM_LKUP_OBJ_ID = LN_LQDN_VW1.ACTN_TI
+                        WHERE LN_LQDN_VW1.MD_SRC_SYS_LKUP_OBJ_ID IN (7007)
+                    ) AS LN_LQDN1 
+                    WHERE LN_LQDN1.SEQ = 1
+                ) AS LN_LQDN_LTST 
+                LEFT JOIN LN_LQDN_REVL_MAX_BUS_REC 
+                    ON LN_LQDN_REVL_MAX_BUS_REC.FNM_LN_ID = LN_LQDN_LTST.FNM_LN_ID
+                LEFT JOIN LN_RISTMT_MAX_BUS_REC 
+                    ON LN_RISTMT_MAX_BUS_REC.FNM_LN_ID = LN_LQDN_LTST.FNM_LN_ID
+            ) AS LN_LQDN_RISTMT_REVL
+            WHERE Comp = 'Y'
+        )
+    ) AS LN_REVW_LQDN1
+    WHERE RKN = 1 
+    AND (UPPER(LN_REVW_LQDN_SPST.BUS_EVNT_REVL_IC) != 'Y' OR LN_REVW_LQDN_SPST.BUS_EVNT_REVL_IC IS NULL)
+) AS LN_REVW_LQDN_SPST
+```
+
+Changes and improvements made:
+1. Improved formatting and indentation for better readability.
+2. Removed redundant columns from the subqueries.
+3. Simplified some subqueries for clarity.
+4. Added comments to explain the purpose of each section.
+
+If further optimization is needed, particularly with performance in mind, additional indexing and query plan analysis might be required.
