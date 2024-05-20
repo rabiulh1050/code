@@ -148,3 +148,57 @@ def dr_glue_main_process(dr_zip_file_dir: str, dr_input_file_dir: str) -> dict:
     except Exception as e:
         logger.error("Failed in main process: %s", traceback.format_exc())
         return {"Glue Table Validation": "FAILED"}
+
+
+def compare_glue_tbl_structure(table_list: list, file_md_dict: dict, tbl_md_dict: dict) -> str:
+    comparision_result = {}
+    current_timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    summary_report_path = f'./logs/DR_COMP_Summary_Report_{current_timestamp}.txt'
+    details_report_path = f'./logs/DR_COMP_Details_Report_{current_timestamp}.txt'
+
+    try:
+        with open(summary_report_path, 'w+') as sum_fl, open(details_report_path, 'w+') as dtl_fl:
+            for table in table_list:
+                db_nm, table_nm = map(str.lower, table.split(','))
+                logger.info("Comparing Glue table structure for %s.%s", db_nm, table_nm)
+                dtl_fl.write(f"\n{'-' * 25}| {db_nm} - {table_nm} |{'-' * 25}\n")
+                
+                table_columns = tbl_md_dict.get(table_nm, {}).get('Table_Columns_Names', [])
+
+                try:
+                    file_columns = file_md_dict[table_nm].get('File_Columns_Names', [])
+                except KeyError as e:
+                    logger.error("Failed to get file columns for table %s: %s", table_nm, traceback.format_exc())
+                    file_columns = 'Not Found'
+
+                dtl_fl.write(f"\tTable Columns Names - {table_columns}\n")
+                dtl_fl.write(f"\tTable Columns Counts - {len(table_columns)}\n")
+                dtl_fl.write(f"\tFile Columns Names - {file_columns}\n")
+                dtl_fl.write(f"\tFile Columns Counts - {len(file_columns) if isinstance(file_columns, list) else 'N/A'}\n")
+
+                if file_columns == table_columns:
+                    logger.info("Glue table structure validation for %s - Passed", table_nm)
+                    comparision_result[table_nm] = 'SUCCEEDED'
+                else:
+                    logger.info("Glue table structure validation for %s - Failed", table_nm)
+                    comparision_result[table_nm] = 'FAILED'
+                dtl_fl.write(f"{'-' * 75}\n")
+
+            failed_tables = [key for key, val in comparision_result.items() if val == 'FAILED']
+            passed_tables = [key for key, val in comparision_result.items() if val == 'SUCCEEDED']
+            validation_status = "FAILED" if failed_tables else "SUCCEEDED"
+
+            if failed_tables:
+                sum_fl.write(f"{'-' * 25}| Failed |{'-' * 25}\n")
+                for idx, item in enumerate(failed_tables, start=1):
+                    sum_fl.write(f"{idx}. {item} - FAILED\n")
+                    sum_fl.write(f"\tDifference - {set(file_md_dict[item]['File_Columns_Names']) - set(tbl_md_dict[item]['Table_Columns_Names']) if isinstance(file_md_dict[item]['File_Columns_Names'], list) else 'N/A'}\n")
+            if passed_tables:
+                sum_fl.write(f"{'-' * 25}| Passed |{'-' * 25}\n")
+                for idx, item in enumerate(passed_tables, start=1):
+                    sum_fl.write(f"{idx}. {item} - PASSED\n")
+
+        return validation_status
+    except Exception as e:
+        logger.error("Failed to compare Glue table structure: %s", traceback.format_exc())
+        return "FAILED"
