@@ -1,0 +1,150 @@
+import os
+import logging
+import traceback
+import boto3
+from glob import glob
+from datetime import datetime
+import pyarrow.parquet as pq
+from botocore.exceptions import ClientError
+
+# Configure logger
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def unzip_file(input_zip_file: str, output_dir: str) -> bool:
+    import zipfile
+    try:
+        with zipfile.ZipFile(input_zip_file, 'r') as zip_ref:
+            zip_ref.extractall(output_dir)
+        return True
+    except Exception as e:
+        logger.error("Failed to unzip file %s: %s", input_zip_file, traceback.format_exc())
+        return False
+
+def get_dr_file_header(input_dr_zip_dir: str, output_dr_dir: str) -> dict:
+    file_metadata_dict = {}
+    try:
+        for zip_file in glob(f"{input_dr_zip_dir}/*.zip"):
+            logger.info("Processing zip file: %s", zip_file)
+            if unzip_file(zip_file, output_dr_dir):
+                for filename in glob(f"{output_dr_dir}/*.parquet"):
+                    parquet_file_name = os.path.basename(filename).split('.parquet')[0]
+                    logger.info("Reading parquet file: %s", filename)
+                    try:
+                        pq_schema = pq.read_schema(filename)
+                        pq_cols_name_ls = pq_schema.names
+                        file_metadata_dict[parquet_file_name] = {
+                            'File_Columns_Names': pq_cols_name_ls,
+                            'File_Columns_Counts': len(pq_cols_name_ls)
+                        }
+                        logger.info("File columns for %s: %s", parquet_file_name, pq_cols_name_ls)
+                    except Exception as e:
+                        logger.error("Failed to read parquet file %s: %s", filename, traceback.format_exc())
+                        file_metadata_dict[parquet_file_name] = {
+                            'File_Columns_Names': [],
+                            'File_Columns_Counts': 0
+                        }
+        return file_metadata_dict
+    except Exception as e:
+        logger.error("Failed to get DR file headers: %s", traceback.format_exc())
+        return {}
+
+def get_glue_tbls_metadata(tables_list: list) -> dict:
+    client = boto3.client('glue')
+    table_metadata_dict = {}
+    try:
+        for table in tables_list:
+            db_nm, table_nm = map(str.lower, table.split(','))
+            logger.info("Fetching metadata for Glue table: %s.%s", db_nm, table_nm)
+            try:
+                response = client.get_table(DatabaseName=db_nm, Name=table_nm)
+                tbl_cols_names = [col['Name'] for col in response['Table']['StorageDescriptor']['Columns']]
+                table_metadata_dict[table_nm] = {
+                    'Table_Columns_Names': tbl_cols_names,
+                    'Table_Columns_Counts': len(tbl_cols_names)
+                }
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'EntityNotFoundException':
+                    logger.error("Table %s.%s does not exist", db_nm, table_nm)
+                else:
+                    logger.error("ClientError when fetching metadata for table %s.%s: %s", db_nm, table_nm, e)
+                table_metadata_dict[table_nm] = {
+                    'Table_Columns_Names': [],
+                    'Table_Columns_Counts': 0
+                }
+            except Exception as e:
+                logger.error("Failed to fetch metadata for table %s.%s: %s", db_nm, table_nm, traceback.format_exc())
+                table_metadata_dict[table_nm] = {
+                    'Table_Columns_Names': [],
+                    'Table_Columns_Counts': 0
+                }
+        return table_metadata_dict
+    except Exception as e:
+        logger.error("Failed to get Glue tables metadata: %s", traceback.format_exc())
+        return {}
+
+def compare_glue_tbl_structure(table_list: list, file_md_dict: dict, tbl_md_dict: dict) -> str:
+    comparision_result = {}
+    current_timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+    summary_report_path = f'./logs/DR_COMP_Summary_Report_{current_timestamp}.txt'
+    details_report_path = f'./logs/DR_COMP_Details_Report_{current_timestamp}.txt'
+
+    try:
+        with open(summary_report_path, 'w+') as sum_fl, open(details_report_path, 'w+') as dtl_fl:
+            for table in table_list:
+                db_nm, table_nm = map(str.lower, table.split(','))
+                logger.info("Comparing Glue table structure for %s.%s", db_nm, table_nm)
+                dtl_fl.write(f"\n{'-' * 25}| {db_nm} - {table_nm} |{'-' * 25}\n")
+                table_columns = tbl_md_dict[table_nm].get('Table_Columns_Names', [])
+                file_columns = file_md_dict[table_nm].get('File_Columns_Names', [])
+
+                dtl_fl.write(f"\tTable Columns Names - {table_columns}\n")
+                dtl_fl.write(f"\tTable Columns Counts - {len(table_columns)}\n")
+                dtl_fl.write(f"\tFile Columns Names - {file_columns}\n")
+                dtl_fl.write(f"\tFile Columns Counts - {len(file_columns)}\n")
+
+                if file_columns == table_columns:
+                    logger.info("Glue table structure validation for %s - Passed", table_nm)
+                    comparision_result[table_nm] = 'SUCCEEDED'
+                else:
+                    logger.info("Glue table structure validation for %s - Failed", table_nm)
+                    comparision_result[table_nm] = 'FAILED'
+                dtl_fl.write(f"{'-' * 75}\n")
+
+            failed_tables = [key for key, val in comparision_result.items() if val == 'FAILED']
+            passed_tables = [key for key, val in comparision_result.items() if val == 'SUCCEEDED']
+            validation_status = "FAILED" if failed_tables else "SUCCEEDED"
+
+            if failed_tables:
+                sum_fl.write(f"{'-' * 25}| Failed |{'-' * 25}\n")
+                for idx, item in enumerate(failed_tables, start=1):
+                    sum_fl.write(f"{idx}. {item} - FAILED\n")
+                    sum_fl.write(f"\tDifference - {set(file_md_dict[item]['File_Columns_Names']) - set(tbl_md_dict[item]['Table_Columns_Names'])}\n")
+            if passed_tables:
+                sum_fl.write(f"{'-' * 25}| Passed |{'-' * 25}\n")
+                for idx, item in enumerate(passed_tables, start=1):
+                    sum_fl.write(f"{idx}. {item} - PASSED\n")
+
+        return validation_status
+    except Exception as e:
+        logger.error("Failed to compare Glue table structure: %s", traceback.format_exc())
+        return "FAILED"
+
+def dr_glue_main_process(dr_zip_file_dir: str, dr_input_file_dir: str) -> dict:
+    try:
+        with open('./config/dr_table_config.txt', 'r') as tbl_cfg_fl:
+            table_list = tbl_cfg_fl.read().splitlines()
+            if table_list:
+                logger.info("Fetching DR parquet files headers.")
+                file_md_dict = get_dr_file_header(dr_zip_file_dir, dr_input_file_dir)
+                logger.info("Fetching Glue tables metadata.")
+                tbl_md_dict = get_glue_tbls_metadata(table_list)
+                logger.info("Comparing Glue tables structure vs. parquet file header.")
+                validation_result = compare_glue_tbl_structure(table_list, file_md_dict, tbl_md_dict)
+            else:
+                logger.warning("Config tables list is empty.")
+                validation_result = "FAILED"
+        return {"Glue Table Validation": validation_result}
+    except Exception as e:
+        logger.error("Failed in main process: %s", traceback.format_exc())
+        return {"Glue Table Validation": "FAILED"}
