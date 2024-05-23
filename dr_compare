@@ -208,7 +208,7 @@ def compare_glue_tbl_structure(table_list: list, file_md_dict: dict, tbl_md_dict
 
 ###########
 
-
+####
 
 import logging
 
@@ -220,7 +220,7 @@ def compare_and_update_dictionaries(glue_dic, parquet_dic):
         if not isinstance(glue_dic, dict) or not isinstance(parquet_dic, dict):
             raise ValueError("Both glue_dic and parquet_dic should be dictionaries.")
 
-        missing_data_dic = {'glue_table': [], 'parquet_table': []}
+        missing_data_dic = {'glue_table': {}, 'parquet_table': {}}
 
         glue_keys = set(glue_dic.keys())
         parquet_keys = set(parquet_dic.keys())
@@ -228,12 +228,12 @@ def compare_and_update_dictionaries(glue_dic, parquet_dic):
         # Find keys that are in glue_dic but not in parquet_dic
         glue_only_keys = glue_keys - parquet_keys
         for key in glue_only_keys:
-            missing_data_dic['glue_table'].append(glue_dic.pop(key))
+            missing_data_dic['glue_table'][key] = glue_dic.pop(key)
 
         # Find keys that are in parquet_dic but not in glue_dic
         parquet_only_keys = parquet_keys - glue_keys
         for key in parquet_only_keys:
-            missing_data_dic['parquet_table'].append(parquet_dic.pop(key))
+            missing_data_dic['parquet_table'][key] = parquet_dic.pop(key)
 
         logging.info("Dictionaries have been compared and updated successfully.")
         return glue_dic, parquet_dic, missing_data_dic
