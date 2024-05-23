@@ -202,3 +202,45 @@ def compare_glue_tbl_structure(table_list: list, file_md_dict: dict, tbl_md_dict
     except Exception as e:
         logger.error("Failed to compare Glue table structure: %s", traceback.format_exc())
         return "FAILED"
+
+
+
+
+###########
+
+
+
+def compare_and_update_dictionaries(glue_dic, parquet_dic):
+    missing_data_dic = {'glue_table': [], 'parquet_table': []}
+
+    # Compare and update glue_dic
+    for key in list(glue_dic.keys()):
+        if key not in parquet_dic:
+            missing_data_dic['glue_table'].append(glue_dic[key])
+            del glue_dic[key]
+
+    # Compare and update parquet_dic
+    for key in list(parquet_dic.keys()):
+        if key not in glue_dic:
+            missing_data_dic['parquet_table'].append(parquet_dic[key])
+            del parquet_dic[key]
+
+    return glue_dic, parquet_dic, missing_data_dic
+
+# Example usage
+glue_dic = {
+    'table1': {'table_name': ['id', 'name', 'age'], 'column_count': 3},
+    'table2': {'table_name': ['id', 'product', 'price'], 'column_count': 3},
+    'table3': {'table_name': ['id', 'employee', 'salary'], 'column_count': 3}
+}
+
+parquet_dic = {
+    'table2': {'table_name': ['id', 'product', 'price'], 'column_count': 3},
+    'table3': {'table_name': ['id', 'employee', 'salary'], 'column_count': 3},
+    'table4': {'table_name': ['id', 'customer', 'order'], 'column_count': 3}
+}
+
+updated_glue_dic, updated_parquet_dic, missing_data_dic = compare_and_update_dictionaries(glue_dic, parquet_dic)
+print(updated_glue_dic)
+print(updated_parquet_dic)
+print(missing_data_dic)
