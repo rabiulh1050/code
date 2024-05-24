@@ -259,3 +259,109 @@ updated_glue_dic, updated_parquet_dic, missing_data_dic = compare_and_update_dic
 print(updated_glue_dic)
 print(updated_parquet_dic)
 print(missing_data_dic)
+
+
+
+
+import logging
+from datetime import datetime
+
+# Assuming logger and log_errors are defined somewhere in the module
+logger = logging.getLogger(__name__)
+
+def log_errors(e, detailed_traceback=False):
+    logger.error(e)
+    if detailed_traceback:
+        import traceback
+        logger.error(traceback.format_exc())
+
+def compare_glue_tbl_structure(table_list=None, file_md_dict=None, tbl_md_dict=None, missing_data_dic=None, missing_data_keys=None):
+    comparision_result = {}
+    try:
+        current_timestamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        with open(f'./logs/DR_COMP_Summary_Report_{current_timestamp}.txt', 'w+') as sum_fl, open(
+                f'./logs/DR_COMP_Details_Report_{current_timestamp}.txt', 'w+') as dtl_fl:
+            
+            for table in table_list:
+                try:
+                    db_nm = (table.split(',')[0]).lower()
+                    table_nm = (table.split(',')[1]).lower()
+                    
+                    if table_nm in missing_data_keys:
+                        continue
+                    
+                    logger.info(f"Comparing {db_nm} - {table_nm}")
+                    dtl_fl.write(f"\n{'-' * 25}| {db_nm} - {table_nm} |{'-' * 25}\n")
+                    dtl_fl.write(f"\tTable Columns Names - {tbl_md_dict[table_nm]['Table_Columns_Names']}\n")
+                    dtl_fl.write(f"\tTable Columns Counts - {len(tbl_md_dict[table_nm]['Table_Columns_Names'])}\n")
+                    dtl_fl.write(f"\tFile Columns Names - {file_md_dict[table_nm]['File_Columns_Names']}\n")
+                    dtl_fl.write(f"\tFile Columns Counts - {len(file_md_dict[table_nm]['File_Columns_Names'])}\n")
+
+                    if file_md_dict[table_nm]['File_Columns_Names'] == tbl_md_dict[table_nm]['Table_Columns_Names']:
+                        logger.info(f'Glue Table Structure validation for {table_nm} - Passed')
+                        comparision_result[table_nm] = 'SUCCEEDED'
+                    else:
+                        logger.info(f'Glue Table Structure validation for {table_nm} - Failed')
+                        comparision_result[table_nm] = 'FAILED'
+                    
+                    dtl_fl.write(f"{'-' * 75}")
+                except KeyError as e:
+                    logger.error(f"KeyError: {e} for table {table_nm}")
+                    comparision_result[table_nm] = 'FAILED'
+
+            failed_tables = [key for key, val in comparision_result.items() if 'FAILED' in val]
+            passed_tables = [key for key, val in comparision_result.items() if 'SUCCEEDED' in val]
+            validation = "FAILED" if failed_tables else "SUCCEEDED"
+
+            if failed_tables:
+                sum_fl.write(f"{'-' * 25}| Failed |{'-' * 25}\n")
+                for idx, item in enumerate(failed_tables, start=1):
+                    sum_fl.write(f"{idx}. {item} - FAILED\n")
+                    sum_fl.write(f"\tDifference - {set(file_md_dict[item]['File_Columns_Names']) - set(tbl_md_dict[item]['Table_Columns_Names'])}\n")
+            
+            if passed_tables:
+                sum_fl.write(f"{'-' * 25}| Passed |{'-' * 25}\n")
+                for idx, item in enumerate(passed_tables, start=1):
+                    sum_fl.write(f"{idx}. {item} - PASSED\n")
+
+            if missing_data_dic:
+                sum_fl.write(f"{'-' * 25}| Missing Data |{'-' * 25}\n")
+                missing_glue_data = missing_data_dic.get('glue_table', [])
+                missing_parquet_data = missing_data_dic.get('parquet_table', [])
+                
+                if missing_glue_data:
+                    for idx, item in enumerate(missing_glue_data, start=1):
+                        sum_fl.write(f"{idx}. {item} - data missing in Glue\n")
+                        print(f"{idx}. {item} - data missing in Glue\n")
+                
+                if missing_parquet_data:
+                    for idx, item in enumerate(missing_parquet_data, start=1):
+                        sum_fl.write(f"{idx}. {item} - data missing in DR File\n")
+                        print(f"{idx}. {item} - data missing in DR file\n")
+
+        return validation, len(passed_tables), len(failed_tables)
+
+    except Exception as e:
+        log_errors(e, detailed_traceback=True)
+        return False
+
+# Example usage
+glue_dic = {
+    'table1': {'table_name': ['id', 'name', 'age'], 'column_count': 3},
+    'table2': {'table_name': ['id', 'product', 'price'], 'column_count': 3},
+    'table3': {'table_name': ['id', 'employee', 'salary'], 'column_count': 3}
+}
+
+parquet_dic = {
+    'table2': {'table_name': ['id', 'product', 'price'], 'column_count': 3},
+    'table3': {'table_name': ['id', 'employee', 'salary'], 'column_count': 3},
+    'table4': {'table_name': ['id', 'customer', 'order'], 'column_count': 3}
+}
+
+missing_data_dic = {'glue_table': ['table5'], 'parquet_table': ['table6']}
+table_list = ['db1,table1', 'db1,table2', 'db1,table3', 'db1,table4']
+missing_data_keys = ['table4']
+
+# Assuming the required dictionaries are provided
+compare_glue_tbl_structure(table_list, parquet_dic, glue_dic, missing_data_dic, missing_data_keys)
+
