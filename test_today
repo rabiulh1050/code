@@ -1,0 +1,50 @@
+import ast
+
+def read_text_file(file_path):
+    """
+    Reads a .txt file containing a list and two dictionaries separated by commas and returns the data.
+
+    :param file_path: Path to the .txt file
+    :return: A tuple containing the list and two dictionaries
+    """
+    try:
+        with open(file_path, 'r') as file:
+            data = file.read()
+        
+        # Split the data by comma
+        data_parts = data.split(',', 2)
+        
+        if len(data_parts) != 3:
+            raise ValueError("File content does not match the expected format of one list and two dictionaries separated by commas.")
+        
+        # Parse the data parts
+        data_list = ast.literal_eval(data_parts[0])
+        data_dict1 = ast.literal_eval(data_parts[1])
+        data_dict2 = ast.literal_eval(data_parts[2])
+        
+        if not isinstance(data_list, list):
+            raise ValueError("The first part of the file is not a list.")
+        if not isinstance(data_dict1, dict):
+            raise ValueError("The second part of the file is not a dictionary.")
+        if not isinstance(data_dict2, dict):
+            raise ValueError("The third part of the file is not a dictionary.")
+        
+        return data_list, data_dict1, data_dict2
+    except FileNotFoundError:
+        print(f"Error: The file at {file_path} does not exist.")
+        return None
+    except ValueError as ve:
+        print(f"Error: {ve}")
+        return None
+    except Exception as e:
+        print(f"An unexpected error occurred: {e}")
+        return None
+
+# Example usage:
+# file_path = 'path/to/your/textfile.txt'
+# result = read_text_file(file_path)
+# if result:
+#     data_list, data_dict1, data_dict2 = result
+#     print("List:", data_list)
+#     print("Dictionary 1:", data_dict1)
+#     print("Dictionary 2:", data_dict2)
