@@ -1,3 +1,129 @@
+import os
+import zipfile
+import logging
+import concurrent.futures
+from glob import glob
+import pyarrow.parquet as pq
+from logs import log_errors, configure_logging
+
+logger = configure_logging()
+
+def unzip_file(input_zip_file: str, output_dir: str) -> bool:
+    """
+    Unzips the specified zip file to the given output directory.
+    :param input_zip_file: Path to the zip file.
+    :param output_dir: Directory to extract the contents of the zip file.
+    :return: True if successful, False otherwise.
+    """
+    try:
+        with zipfile.ZipFile(input_zip_file, 'r') as zip_ref:
+            zip_ref.extractall(output_dir)
+        logger.info(f"Extracted {input_zip_file} to {output_dir}")
+        return True
+    except Exception as e:
+        log_errors(e, detailed_traceback=True)
+        return False
+
+def read_parquet_file_metadata(parquet_file: str) -> dict:
+    """
+    Reads metadata from the specified parquet file.
+    :param parquet_file: Path to the parquet file.
+    :return: Dictionary containing column names and counts.
+    """
+    try:
+        parquet_file_name = os.path.basename(parquet_file).split('.parquet')[0]
+        logger.debug(f"Reading Parquet File: {parquet_file_name}")
+        pq_df = pq.read_schema(parquet_file)
+        pq_cols_name_ls = pq_df.names
+        metadata = {
+            'File_Columns_Names': pq_cols_name_ls,
+            'File_Columns_Counts': len(pq_cols_name_ls)
+        } if pq_cols_name_ls else {
+            'File_Columns_Names': [],
+            'File_Columns_Counts': 0
+        }
+        logger.debug(f"{parquet_file_name}: {pq_cols_name_ls}")
+        return parquet_file_name, metadata
+    except Exception as e:
+        log_errors(e, detailed_traceback=True)
+        return os.path.basename(parquet_file).split('.parquet')[0], {
+            'File_Columns_Names': [],
+            'File_Columns_Counts': 0
+        }
+
+def process_zip_file(zip_file: str, output_dr_dir: str) -> dict:
+    """
+    Processes a single zip file: unzips it and reads metadata from contained parquet files.
+    :param zip_file: Path to the zip file.
+    :param output_dr_dir: Directory to extract and process the files.
+    :return: Metadata dictionary for parquet files.
+    """
+    file_metadata_dict = {}
+    if unzip_file(zip_file, output_dr_dir):
+        parquet_files = glob(f"{output_dr_dir}/*.parquet")
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future_to_parquet = {
+                executor.submit(read_parquet_file_metadata, file): file
+                for file in parquet_files
+            }
+            for future in concurrent.futures.as_completed(future_to_parquet):
+                file = future_to_parquet[future]
+                parquet_file_name, metadata = future.result()
+                file_metadata_dict[parquet_file_name] = metadata
+    return file_metadata_dict
+
+def get_dr_file_header(input_dr_zip_dir: str, output_dr_dir: str) -> dict:
+    """
+    Retrieves metadata for parquet files within zip files in the specified directory.
+    :param input_dr_zip_dir: Directory containing the zip files.
+    :param output_dr_dir: Directory to extract the files.
+    :return: Metadata dictionary for all parquet files.
+    """
+    try:
+        zip_files = glob(f"{input_dr_zip_dir}/*.zip")
+        logger.info(f"Found {len(zip_files)} zip files in {input_dr_zip_dir}")
+
+        file_metadata_dict = {}
+        with concurrent.futures.ThreadPoolExecutor() as executor:
+            future_to_zip = {
+                executor.submit(process_zip_file, zip_file, output_dr_dir): zip_file
+                for zip_file in zip_files
+            }
+            for future in concurrent.futures.as_completed(future_to_zip):
+                zip_file = future_to_zip[future]
+                try:
+                    metadata = future.result()
+                    file_metadata_dict.update(metadata)
+                except Exception as e:
+                    logger.error(f"Error processing zip file: {zip_file}")
+                    log_errors(e, detailed_traceback=True)
+        
+        return file_metadata_dict
+    except Exception as e:
+        log_errors(e, detailed_traceback=True)
+        return {}
+
+# Example usage:
+# input_dr_zip_dir = 'path/to/zip/files'
+# output_dr_dir = 'path/to/extracted/files'
+# metadata = get_dr_file_header(input_dr_zip_dir, output_dr_dir)
+# print(metadata)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 import ast
 
 def read_text_file(file_path):
