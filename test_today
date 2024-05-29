@@ -48,3 +48,79 @@ def read_text_file(file_path):
 #     print("List:", data_list)
 #     print("Dictionary 1:", data_dict1)
 #     print("Dictionary 2:", data_dict2)
+
+
+
+
+import boto3
+import concurrent.futures
+from botocore.exceptions import ClientError
+from config import APP_CONFIG
+from logs import log_errors, configure_logging
+
+logger = configure_logging()
+
+def get_table_metadata(db_name, table_name, client):
+    """
+    Retrieves metadata for a specific Glue table.
+    :param db_name: The name of the Glue database.
+    :param table_name: The name of the Glue table.
+    :param client: The boto3 Glue client.
+    :return: Metadata dictionary containing column names and counts.
+    """
+    table_metadata = {}
+    try:
+        response = client.get_table(DatabaseName=db_name, Name=table_name)
+        if response:
+            logger.info(f"Received response for Glue table: {db_name}.{table_name}")
+            tbl_name = response['Table']['Name']
+            if table_name == tbl_name:
+                tbl_cols_names = [col['Name'] for col in response['Table']['StorageDescriptor']['Columns']]
+                table_metadata['Table_Columns_Names'] = tbl_cols_names
+                table_metadata['Table_Columns_Counts'] = len(tbl_cols_names)
+            else:
+                logger.warning(f"Retrieved incorrect metadata for table: {table_name}")
+                table_metadata['Table_Columns_Names'] = []
+                table_metadata['Table_Columns_Counts'] = 0
+        else:
+            logger.warning(f"No response received for Glue table: {db_name}.{table_name}")
+            table_metadata['Table_Columns_Names'] = []
+            table_metadata['Table_Columns_Counts'] = 0
+    except ClientError as e:
+        log_errors(e, detailed_traceback=True)
+        if e.response['Error']['Code'] == 'EntityNotFoundException':
+            logger.error(f"Table does not exist: {db_name}.{table_name}")
+        table_metadata['Table_Columns_Names'] = []
+        table_metadata['Table_Columns_Counts'] = 0
+    except Exception as e:
+        log_errors(e, detailed_traceback=True)
+        table_metadata['Table_Columns_Names'] = []
+        table_metadata['Table_Columns_Counts'] = 0
+    return table_metadata
+
+def get_glue_tbls_metadata(tables_list):
+    """
+    Retrieves metadata for a list of Glue tables.
+    :param tables_list: List of tables in the format "database_name,table_name".
+    :return: Dictionary containing metadata for each table.
+    """
+    table_metadata_dict = {}
+    client = boto3.client('glue')
+
+    with concurrent.futures.ThreadPoolExecutor() as executor:
+        future_to_table = {
+            executor.submit(get_table_metadata, table.split(',')[0].lower(), table.split(',')[1].lower(), client): table
+            for table in tables_list
+        }
+        for future in concurrent.futures.as_completed(future_to_table):
+            table = future_to_table[future]
+            table_name = table.split(',')[1].lower()
+            try:
+                table_metadata = future.result()
+                table_metadata_dict[table_name] = table_metadata
+            except Exception as e:
+                logger.error(f"Error retrieving metadata for table: {table}")
+                log_errors(e, detailed_traceback=True)
+                table_metadata_dict[table_name] = {'Table_Columns_Names': [], 'Table_Columns_Counts': 0}
+
+    return table_metadata_dict
