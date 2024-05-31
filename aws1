@@ -1,36 +1,38 @@
 import json
+import operator
 import os
 import traceback
 import re
-from os import walk
+from os import path, walk
 import boto3
 from botocore.config import Config
 from botocore.exceptions import BotoCoreError, ClientError
 from config import APP_CONFIG
 from logs import log_errors, configure_logging
 
+# Logger configuration
 logger = configure_logging()
 
+# Boto3 adaptive retries configuration
 ADAPTIVE_RETRIES = Config(retries={"max_attempts": 10})
-
 
 def create_s3_client():
     return boto3.client('s3', config=ADAPTIVE_RETRIES)
 
-
 def create_sqs_client():
     return boto3.client("sqs", endpoint_url="https://sqs.us-east-1.amazonaws.com")
-
 
 def create_secrets_manager_client():
     return boto3.client('secretsmanager')
 
-
 def create_sns_client():
     return boto3.client('sns')
 
+def create_ecs_client():
+    return boto3.client('ecs', endpoint_url="https://ecs.us-east-1.amazonaws.com")
 
 def write_s3_file(s3_key: str, body: str):
+    """Write content to an S3 file for the provided S3 key."""
     try:
         s3_client = create_s3_client()
         logger.info(f"Writing {s3_key} file.")
@@ -44,55 +46,55 @@ def write_s3_file(s3_key: str, body: str):
         log_errors(e)
         return None
 
-
 def read_s3_file(s3_key: str):
+    """Read content from an S3 file for the provided S3 key."""
     try:
-        s3_client = create_s3_client()
+        s3_client = boto3.resource('s3')
         logger.info(f"Reading {s3_key} file.")
-        response = s3_client.get_object(
-            Bucket=APP_CONFIG["S3_Bucket"],
-            Key=s3_key
-        )
-        content = response['Body'].read().decode('utf-8')
-        return content
+        s3_bucket = APP_CONFIG["S3_Bucket"]
+        s3_object = s3_client.Bucket(s3_bucket).Object(s3_key).get()
+        file_content = s3_object['Body'].read().decode('utf-8')
+        return file_content
     except Exception as e:
         log_errors(e)
         return None
 
-
 def list_s3_objects(s3_key_prefix: str):
+    """List S3 objects for the provided S3 prefix, sorted by modification date."""
+    s3_client = create_s3_client()
+    s3_bucket = APP_CONFIG["S3_Bucket"]
+    s3_object_list = []
     try:
-        s3_client = create_s3_client()
-        s3_bucket = APP_CONFIG["S3_Bucket"]
         logger.info(f"Fetching object list from S3://{s3_bucket}/{s3_key_prefix}")
-        s3_object_list = []
-        response_dict = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix=s3_key_prefix)
-        contents = response_dict.get("Contents", [])
+        response = s3_client.list_objects_v2(Bucket=s3_bucket, Prefix=s3_key_prefix)
+        contents = response.get("Contents", [])
         s3_object_list.extend(contents)
-        is_truncated = response_dict.get("IsTruncated", False)
+
+        is_truncated = response.get("IsTruncated", False)
         while is_truncated:
-            continuation_token = response_dict.get("NextContinuationToken")
-            response_dict = s3_client.list_objects_v2(
+            continuation_token = response.get("NextContinuationToken")
+            response = s3_client.list_objects_v2(
                 Bucket=s3_bucket,
                 Prefix=s3_key_prefix,
                 ContinuationToken=continuation_token
             )
-            contents = response_dict.get("Contents", [])
+            contents = response.get("Contents", [])
             s3_object_list.extend(contents)
-            is_truncated = response_dict.get("IsTruncated", False)
-        sorted_s3_list = sorted(s3_object_list, key=lambda x: x['LastModified'], reverse=True)
-        return sorted_s3_list
+            is_truncated = response.get("IsTruncated", False)
+        return sorted(s3_object_list, key=operator.itemgetter('LastModified'), reverse=True)
     except ClientError as e:
-        log_errors(e, message='ClientError occurred for s3', detailed_traceback=True)
+        log_errors(e, message='ClientError occurred for S3', detailed_traceback=True)
         return None
 
+def send_queue_message(queue: str, message: str, message_attributes: dict = None, 
+                       message_group_id: str = None, message_deduplication_id: str = None):
+    """Send a message to an SQS queue."""
+    sqs_client = create_sqs_client()
 
-def send_queue_message(queue, message, message_attributes=None, message_group_id=None, message_deduplication_id=None):
     if message_attributes is None:
         message_attributes = {}
 
     try:
-        sqs_client = create_sqs_client()
         logger.info(f"Publishing the message on {queue}.")
         if message_group_id and message_deduplication_id:
             response = sqs_client.send_message(
@@ -108,15 +110,15 @@ def send_queue_message(queue, message, message_attributes=None, message_group_id
                 MessageBody=message,
                 MessageAttributes=message_attributes
             )
-        logger.info(f"Message Published.")
+        logger.info("Message Published.")
         return response
     except ClientError as error:
         log_errors(error)
     except Exception as e:
         log_errors(e)
 
-
 def fetch_db_credential(app_short_name: str = 'fn2gn2lq1', secret_name: str = None):
+    """Fetch database credentials from AWS Secrets Manager."""
     try:
         sm_client = create_secrets_manager_client()
         response = sm_client.get_secret_value(SecretId=secret_name)
@@ -126,77 +128,123 @@ def fetch_db_credential(app_short_name: str = 'fn2gn2lq1', secret_name: str = No
         log_errors(e)
         return False
 
-
-def subscribe_to_sns(lambda_arn, sns_arn):
+def subscribe_to_sns(lambda_arn: str, sns_arn: str):
+    """Subscribe a Lambda function to an SNS topic."""
+    sns_client = create_sns_client()
     try:
-        sns_client = create_sns_client()
         response = sns_client.subscribe(
             TopicArn=sns_arn,
             Protocol='lambda',
             Endpoint=lambda_arn
         )
-        logger.info(f'Subscription successfully for {lambda_arn} and {sns_arn} with response {response}')
+        logger.info(f'Subscription successful for {lambda_arn} and {sns_arn} with response {response}')
         return response
     except (BotoCoreError, ClientError) as e:
-        log_errors(e, message='Error subscribing lambda to SNS topic', detailed_traceback=True)
+        log_errors(e, message='Error subscribing Lambda to SNS topic', detailed_traceback=True)
         return False
 
-
-def unsubscribe_from_sns(subscription_arn):
+def unsubscribe_from_sns(subscription_arn: str):
+    """Unsubscribe from an SNS topic."""
+    sns_client = create_sns_client()
     try:
-        sns_client = create_sns_client()
-        response = sns_client.unsubscribe(
-            SubscriptionArn=subscription_arn
-        )
-        logger.info(f'Unsubscription successful. response: {response}')
+        response = sns_client.unsubscribe(SubscriptionArn=subscription_arn)
+        logger.info(f'Unsubscription successful. Response: {response}')
         return response
     except (BotoCoreError, ClientError) as e:
         log_errors(e, message='Error unsubscribing from SNS topic', detailed_traceback=True)
         return False
 
+def delete_s3_objects(prefix: str):
+    """Delete S3 objects for the provided prefix."""
+    s3_client = create_s3_client()
+    s3_bucket = APP_CONFIG["S3_Bucket"]
+    logger.info(f"Initiating S3 object deletion for directory: {prefix}")
 
-def delete_s3_objects(prefix='land/cin/dflt/DSET99999999/test_data/vending/'):
-    try:
-        s3_client = create_s3_client()
-        s3_bucket = APP_CONFIG["S3_Bucket"]
-        logger.info(f"Initiating S3 object deletion for directory: {prefix}")
-
-        objects = list_s3_objects(prefix)
-        if objects:
-            delete_objects = [{'Key': obj['Key']} for obj in objects]
-            logger.info(f'S3 objects to be deleted: {delete_objects}')
-            response = s3_client.delete_objects(
-                Bucket=s3_bucket,
-                Delete={'Objects': delete_objects}
-            )
-            logger.info(f'S3 Delete request ended with: {str(response)}')
-            deleted_data = [doc.get('Key', '') for doc in response.get('Deleted', [])]
-            logger.info(f"Documents deleted: {deleted_data}")
-            return True
-    except ClientError as e:
-        logger.error(f'An AWS error occurred: {e}')
+    if prefix:
+        try:
+            objects = list_s3_objects(prefix)
+            if objects:
+                delete_objects = [{'Key': obj['Key']} for obj in objects]
+                logger.info(f'S3 objects to be deleted: {delete_objects}')
+                response = s3_client.delete_objects(
+                    Bucket=s3_bucket,
+                    Delete={'Objects': delete_objects}
+                )
+                logger.info(f'S3 Delete request ended with: {str(response)}')
+                deleted_data = [doc.get('Key', '') for doc in response.get('Deleted', [])]
+                logger.info(f"Documents deleted: {deleted_data}")
+                return True
+        except ClientError as e:
+            logger.error(f'An AWS error occurred: {e}')
+            return False
+        except Exception as e:
+            log_errors(e)
+    else:
+        logger.error('Please provide a prefix for the S3 bucket')
         return False
-    except Exception as e:
-        log_errors(e)
-    return False
 
-
-def upload_logs_files(local_input_dir: str = None, object_name: str = None):
+def upload_logs_files(local_input_dir: str, object_name: str):
+    """Upload log files from a local directory to S3."""
+    s3_client = create_s3_client()
+    aws_kms_key = f'alias/fnma/app/{APP_CONFIG["App_Short_Name"]}'
     try:
-        s3_client = create_s3_client()
-        aws_kms_key = f'alias/fnma/app/{APP_CONFIG["App_Short_Name"]}'
-
-        if os.path.isdir(local_input_dir):
-            for root_dir, sub_dirs, files in walk(local_input_dir):
+        if path.isdir(local_input_dir):
+            for root_dir, _, files in walk(local_input_dir):
                 for file in files:
-                    logger.info(f'File Name - {file}')
+                    logger.info(f'File Name: {file}')
                     full_path = os.path.join(root_dir, file)
+                    logger.debug(f'Full Path: {full_path}')
                     s3_uri = f'{re.sub("^/|/$", "", object_name)}/{file}'
                     s3_client.upload_file(full_path, APP_CONFIG["S3_Bucket"], s3_uri)
-                    logger.info(f'{file} is uploaded at {s3_uri}')
+                    logger.info(f'{file} is uploaded to {s3_uri}')
         else:
             logger.error(f'Invalid directory: {local_input_dir}')
+            return False
+        return True
     except Exception as e:
         tb = traceback.TracebackException.from_exception(e, capture_locals=True)
         logger.error("".join(tb.format()))
         return False
+
+def check_s3_object_exist(s3_key_prefix: str):
+    """Check if an S3 object exists for the provided prefix."""
+    s3_client = create_s3_client()
+    s3_bucket = APP_CONFIG["S3_Bucket"]
+    try:
+        s3_client.head_object(Bucket=s3_bucket, Key=s3_key_prefix)
+        return True
+    except ClientError as e:
+        log_errors(e, message='Unexpected Error Occurred during S3 call.')
+        return False
+    except Exception as e:
+        log_errors(e, detailed_traceback=True)
+        return False
+
+def check_ecs_services_status(component_filter_name: str):
+    """Check the status of ECS services filtered by component name."""
+    try:
+        ecs_client = create_ecs_client()
+        ecs_services = ecs_client.list_services(cluster='fn2gn2lq1-ecs-lqcs')['serviceArns']
+        ecs_services_details = ecs_client.describe_services(
+            cluster='fn2gn2lq1-ecs-lqcs',
+            services=ecs_services
+        )['services']
+        services_status = [
+            {"serviceName": service['serviceName'], "runningCount": service['runningCount']}
+            for service in ecs_services_details if component_filter_name in service['serviceName']
+        ]
+        for service in services_status:
+            if service['runningCount'] == 0:
+                logger.info(f"{service['serviceName']} is not running!")
+                return False
+        logger.info('All services are running!')
+        return True
+    except Exception as e:
+        log_errors(e)
+        return False
+
+# Example usage
+if __name__ == "__main__":
+    # Replace with actual parameters for testing
+    result = write_s3_file('test/key', 'Test content')
+    print(result)
