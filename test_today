@@ -1,3 +1,51 @@
+import re
+from datetime import datetime
+
+def get_latest_files(file_list):
+    # Regex to match the required file pattern
+    pattern = re.compile(r'(\d{8})-\d{4}_par0[1-3]\.zip')
+
+    # Dictionary to store files by date
+    files_by_date = {}
+
+    # Loop through all files in the list
+    for filename in file_list:
+        match = pattern.match(filename)
+        if match:
+            date_str = match.group(1)
+            date = datetime.strptime(date_str, '%Y%m%d')
+            if date not in files_by_date:
+                files_by_date[date] = []
+            files_by_date[date].append(filename)
+    
+    # Sort the dictionary by date (keys) in descending order
+    sorted_dates = sorted(files_by_date.keys(), reverse=True)
+
+    # Get the latest date's files
+    latest_files = []
+    for date in sorted_dates:
+        parts = sorted(files_by_date[date])  # Sort by filename
+        latest_files.extend(parts)
+        if len(latest_files) >= 3:
+            break
+
+    return latest_files[:3]
+
+# Example usage
+file_list = [
+    '20231111-0101_par01.zip', '20231111-0101_par02.zip', '20231111-0101_par03.zip',
+    '20240505-0101_par01.zip', '20240505-0101_par02.zip', '20240505-0101_par03.zip',
+    'test1', 'test2'
+]
+latest_files = get_latest_files(file_list)
+print(latest_files)
+
+
+
+
+
+
+
 import os
 import re
 from collections import defaultdict
