@@ -1,4 +1,44 @@
 import os
+import re
+from collections import defaultdict
+from datetime import datetime
+
+def get_latest_files(directory):
+    # Regex to match the required file pattern
+    pattern = re.compile(r'(\d{8}_\d{4})_par(0[1-3])\.zip')
+
+    # Dictionary to store files by date
+    files_by_date = defaultdict(list)
+
+    # Loop through all files in the directory
+    for filename in os.listdir(directory):
+        match = pattern.match(filename)
+        if match:
+            date_str = match.group(1)
+            part = match.group(2)
+            files_by_date[date_str].append((part, filename))
+    
+    # Sort the dictionary by date (keys)
+    sorted_dates = sorted(files_by_date.keys(), reverse=True)
+
+    # Get the latest date's files
+    latest_files = []
+    for date in sorted_dates:
+        parts = sorted(files_by_date[date])  # Sort by part
+        if len(parts) == 3:
+            latest_files.extend([file[1] for file in parts])
+            break
+
+    return latest_files
+
+# Example usage
+directory_path = 'path/to/your/directory'
+latest_files = get_latest_files(directory_path)
+print(latest_files)
+
+
+
+import os
 import zipfile
 import logging
 import concurrent.futures
