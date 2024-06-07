@@ -1,3 +1,77 @@
+def extract_date(item):
+    """
+    Extracts the date from the last part of the string.
+
+    :param item: String containing the date.
+    :return: Extracted date as a datetime object or None if extraction fails.
+    """
+    try:
+        date_str = item.split('/')[-1].split('_')[0].split('-')[0]
+        if len(date_str) == 8 and date_str.isdigit():
+            return datetime.strptime(date_str, "%Y%m%d")
+        else:
+            raise ValueError(f"Invalid date format in item: {item}")
+    except (IndexError, ValueError) as e:
+        logger.warning(f"Failed to extract date from item: {item} with error: {e}")
+        return None
+
+def get_latest_items(data, n=3):
+    """
+    Returns the n items with the latest dates from the provided data.
+
+    :param data: List of strings containing dates in the format YYYYMMDD in the last part.
+    :param n: Number of items to return with the latest dates.
+    :return: List of n items with the latest dates.
+    """
+    try:
+        # Filter out items with invalid dates
+        valid_items = [(item, extract_date(item)) for item in data]
+        valid_items = [(item, date) for item, date in valid_items if date is not None]
+
+        # Sort the valid items by date in descending order
+        sorted_data = sorted(valid_items, key=lambda x: x[1], reverse=True)
+
+        # Log the sorted data for debugging
+        logger.debug(f"Sorted data: {sorted_data}")
+
+        # Return the top n items
+        return [item for item, _ in sorted_data[:n]]
+    except Exception as e:
+        logger.error(f"An error occurred while processing the data: {e}")
+        return []
+
+def validate_data(data):
+    """
+    Validates that the data has exactly 3 elements, all with the same date, and filenames ending with .par01.zip, .par02.zip, and .par03.zip.
+
+    :param data: List of strings containing file paths.
+    :return: Dictionary with validation result, filtered data, and date.
+    """
+    if len(data) != 3:
+        logger.error("Data does not have exactly 3 elements.")
+        return {"valid": False, "message": "Data does not have exactly 3 elements."}
+
+    dates = [extract_date(item) for item in data]
+    if None in dates or len(set(dates)) != 1:
+        logger.error("Dates are not consistent across all elements.")
+        return {"valid": False, "message": "Dates are not consistent across all elements."}
+
+    required_endings = ['par01.zip', 'par02.zip', 'par03.zip']
+    for ending in required_endings:
+        matching_files = [item for item in data if item.endswith(ending)]
+        if len(matching_files) != 1:
+            logger.error(f"Incorrect number of files with ending {ending}")
+            return {"valid": False, "message": f"Incorrect number of files with ending {ending}"}
+
+    # Extract the consistent date
+    valid_date = dates[0].strftime("%Y%m%d")
+
+    return {"valid": True, "date": valid_date, "files": data}
+
+
+
+
+
 
 
 
