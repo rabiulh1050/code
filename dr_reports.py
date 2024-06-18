@@ -1,3 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Test Automation Report</title>
+    <style>
+        :root {{
+            --success-color: #4CAF50;
+            --fail-color: #F44336;
+            --not-run-color: #FF9800;
+            --error-color: #F44336;
+            --not-required-color: #607D8B;
+            --background-color: #f2f2f2;
+        }}
+        body {{
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 20px;
+        }}
+        h1 {{
+            text-align: center;
+        }}
+        .report-container {{
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+            gap: 20px;
+        }}
+        .report-item {{
+            border: 1px solid #ddd;
+            padding: 1em;
+            margin-top: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }}
+        .report-item h2 {{
+            font-size: 20px;
+            padding: 0.1em;
+            text-align: center;
+        }}
+        .status {{
+            padding: 5px 10px;
+            color: white;
+            border-radius: 4px;
+            margin-top: 5px;
+            margin-right: 10px;
+            white-space: nowrap;
+            text-align: center;
+        }}
+        .succeeded {{ background-color: var(--success-color); }}
+        .failed {{ background-color: var(--fail-color); }}
+        .not-run {{ background-color: var(--not-run-color); }}
+        .error {{ background-color: var(--error-color); }}
+        .not-required {{ background-color: var(--not-required-color); }}
+        .metadata {{
+            margin-top: 20px;
+            background: var(--background-color);
+            padding: 10px;
+            border-radius: 4px;
+        }}
+        .explanation {{
+            margin-top: 20px;
+            font-style: italic;
+        }}
+        .chart-container {{
+            width: 80%;
+            height: 80%;
+            max-width: 4in;
+            max-height: 4in;
+            margin: auto;
+            text-align: center;
+        }}
+        .chart-container h2 {{
+            text-align: center;
+            font-size: 20px;
+        }}
+    </style>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <h1>{{test_name}}</h1>
+    <div class="metadata">
+        <p>Environment: {{environment}}</p>
+        <p>Test Execution Timestamp: {{timestamp}}</p>
+    </div>
+    <div class="report-container">
+        {{rows}}
+    </div>
+    {{multievent_explanation}}
+    <script>
+        {{chart_script}}
+    </script>
+</body>
+</html>
+
+
+
+
+
+
+
 import logging
 from pathlib import Path
 from typing import Dict, Tuple
@@ -94,6 +194,7 @@ def generate_html_report(test_results: Dict[str, Dict[str, str]],
                 multievent_explanation = ("<div class='explanation'>The 'multievent' encompasses scenarios: mismatch, "
                                           "scanned, and missingfile.</div>")
 
+        # Ensure the HTML template placeholders are correctly formatted
         return html_template.format(
             test_name='DR Test Automation Report',
             timestamp=current_timestamp,
@@ -102,6 +203,9 @@ def generate_html_report(test_results: Dict[str, Dict[str, str]],
             multievent_explanation=multievent_explanation,
             chart_script=chart_script
         )
+    except KeyError as e:
+        logging.error(f"KeyError encountered: {e}")
+        raise
     except Exception as e:
         logging.error(f"Error generating HTML report: {e}")
         raise
