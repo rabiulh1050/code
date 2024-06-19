@@ -1,83 +1,137 @@
-WITH MD_DATA_ENUM AS (
-    SELECT 
-        DATA_ENUM_TP,
-        DATA_ENUM_ED,
-        MD_DATA_ENUM_LKUP_OBJ_ID,
-        DATA_ENUM_ATTR_NM
-    FROM ${RS_IDS_SCHEMA_NM}.MD_DATA_ENUM_LKUP
-    WHERE DATA_ENUM_ATTR_NM IN ('LPPPRDC_TI') 
-      AND DATA_ENUM_TP = 'ReverseMortgage'
-),
-LN_LQDN_BASE AS (
-    SELECT 
-        LN_LQDN_VW1.FNM_LN_ID,
-        LN_LQDN_VW1.BUS_EVNT_TM,
-        LN_LQDN_VW1.ACVY_RPTG_PRD,
-        LN_LQDN_VW1.ACVY_RPTG_PRD_DT,
-        LN_LQDN_VW1.BUS_EVNT_REVL_IC,
-        LN_LQDN_VW1.ACTN_TI,
-        LN_STC_VW1.LPPPRDC_TI,
-        LN_LQDN_VW1.LQDD_UPB_AM,
-        LN_LQDN_VW1.LQDN_EVNT_ACTN_DT,
-        LN_LQDN_VW1.PDSC_RPURD_AM,
-        LN_LQDN_VW1.ACTL_UPB_AM,
-        LN_LQDN_VW1.TOT_LPTI_AM,
-        LN_LQDN_VW1.MD_SRC_SYS_LKUP_OBJ_ID,
-        DENSE_RANK() OVER (
-            PARTITION BY LN_LQDN_VW1.FNM_LN_ID, LN_LQDN_VW1.ACVY_RPTG_PRD 
-            ORDER BY LN_LQDN_VW1.BUS_EVNT_TM DESC NULLS LAST
-        ) AS SEQ
-    FROM ${RS_IDS_SCHEMA_NM}.LN_LQDN AS LN_LQDN_VW1
-    LEFT JOIN ${RS_IDS_SCHEMA_NM}.LN_STC AS LN_STC_VW1
-        ON LN_LQDN_VW1.MD_SRC_SYS_LKUP_OBJ_ID = 9999
-        AND LN_LQDN_VW1.FNM_LN_ID = LN_STC_VW1.FNM_LN_ID
-        AND LN_STC_VW1.MD_SRC_SYS_LKUP_OBJ_ID = 9999
-),
-LN_LQDN_VW1 AS (
-    SELECT 
-        FNM_LN_ID,
-        BUS_EVNT_TM,
-        ACVY_RPTG_PRD,
-        ACVY_RPTG_PRD_DT,
-        BUS_EVNT_REVL_IC,
-        ACTN_TI,
-        LPPPRDC_TI,
-        LQDD_UPB_AM,
-        LQDN_EVNT_ACTN_DT,
-        PDSC_RPURD_AM,
-        ACTL_UPB_AM,
-        TOT_LPTI_AM,
-        MD_SRC_SYS_LKUP_OBJ_ID,
-        SEQ
-    FROM LN_LQDN_BASE
-    WHERE SEQ = 1
-)
-SELECT 
-    LN_REVW_ST_SPST.LN_REVW_ST_SPST_OBJ_ID,
-    LN_REVW_ST_SPST.FNM_LN_ID,
-    LN_REVW_ST_SPST.LN_REVW_ID,
-    CAST(LN_LQDN_VW1.BUS_EVNT_TM AS TIMESTAMP),
-    CAST(LN_LQDN_VW1.ACVY_RPTG_PRD_DT AS TIMESTAMP),
-    LN_LQDN_VW1.BUS_EVNT_REVL_IC,
-    ACTN_TI AS LN_ACTN_TYP,
-    CAST(LN_LQDN_VW1.ACTN_TI AS NUMERIC) AS LN_ACTN_CD,
-    LN_LQDN_VW1.LQDD_UPB_AM,
-    CAST(LN_LQDN_VW1.LQDN_EVNT_ACTN_DT AS TIMESTAMP),
-    LN_LQDN_VW1.ACVY_RPTG_PRD,
-    NULL AS LN_ACTN_TYP_REF_VAL_CD,
-    LN_LQDN_VW1.PDSC_RPURD_AM AS LN_PREM_DISC_RPURD_AMT,
-    LN_LQDN_VW1.ACTL_UPB_AM AS LN_ACTL_UPB_AMT,
-    LN_LQDN_VW1.TOT_LPTI_AM AS LN_TOT_LNDR_PASS_THRU_INT_AMT,
-    LN_LQDN_VW1.MD_SRC_SYS_LKUP_OBJ_ID,
-    LN_REVW_REFL_SELN_SPST.LN_REVW_SRC_SYS_EVNT_NME_TYP
-FROM ${RS_CONV_TGT_DIM_SCHEMA_NM}.LN_REVW_REFL_SELN_SPST
-JOIN ${RS_CONV_TGT_DIM_SCHEMA_NM}.LN_REVW_ST_SPST 
-    ON LN_REVW_ST_SPST.LN_REVW_ID = LN_REVW_REFL_SELN_SPST.LN_REVW_ID 
-    AND LN_REVW_ST_SPST.FNM_LN_ID = LN_REVW_REFL_SELN_SPST.FNM_LN_ID
-    AND LN_REVW_ST_SPST.SRC_SYS_INFC_NME_TYP = 'IDS'
-    AND LN_REVW_REFL_SELN_SPST.EVNT_NME_CD NOT IN ('3001', '3002', '3011', '3030')
-JOIN LN_LQDN_VW1
-    ON LN_LQDN_VW1.FNM_LN_ID = LN_REVW_REFL_SELN_SPST.FNM_LN_ID
-JOIN MD_DATA_ENUM
-    ON MD_DATA_ENUM.MD_DATA_ENUM_LKUP_OBJ_ID = LN_LQDN_VW1.LPPPRDC_TI
-    AND MD_DATA_ENUM.DATA_ENUM_ATTR_NM = 'LPPPRDC_TI';
+import logging
+from pathlib import Path
+from typing import Dict, Tuple
+
+# Configure logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+
+# Define status classes for CSS
+status_classes = {
+    'succeeded': 'succeeded',
+    'failed': 'failed',
+    'not_run': 'not-run',
+    'error': 'error',
+    'not_required': 'not-required'
+}
+
+def read_html_file(html_file_path: Path) -> str:
+    """Read the HTML template file and return its content as a string."""
+    try:
+        with html_file_path.open('r', encoding='utf-8') as file:
+            return file.read()
+    except FileNotFoundError:
+        logging.error(f"HTML file not found: {html_file_path}")
+        raise
+    except Exception as e:
+        logging.error(f"Error reading HTML file: {e}")
+        raise
+
+def create_chart_script(test_passed: int, test_failed: int) -> str:
+    """Create JavaScript for rendering the chart in the HTML report."""
+    return f"""
+    const passed = {test_passed};  // Input value for passed
+    const failed = {test_failed};  // Input value for failed
+
+    const ctx = document.getElementById('testResultChart').getContext('2d');
+    const myPieChart = new Chart(ctx, {{
+        type: 'pie',
+        data: {{
+            labels: ['Passed', 'Failed'],
+            datasets: [{{
+                data: [passed, failed],
+                backgroundColor: ['#36a2eb', '#ff6384'],
+                hoverBackgroundColor: ['#36a2eb', '#ff6384']
+            }}]
+        }},
+        options: {{
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {{
+                tooltip: {{
+                    callbacks: {{
+                        label: function(context) {{
+                            let label = context.label || '';
+                            if (label) {{
+                                label += ': ';
+                            }}
+                            label += context.raw + ' (' + (context.raw / (passed + failed) * 100).toFixed(2) + '%)';
+                            return label;
+                        }}
+                    }}
+                }}
+            }}
+        }}
+    }});
+    """
+
+def generate_html_report(test_results: Dict[str, Dict[str, str]], 
+                         current_timestamp: str, 
+                         test_environment: str, 
+                         result_count: Tuple[int, int] = None) -> str:
+    """
+    Generate an HTML report for the test automation results.
+
+    :param test_results: Dictionary containing test events and their results
+    :param current_timestamp: Timestamp of the test execution
+    :param test_environment: Environment in which the tests were run
+    :param result_count: Tuple containing the count of passed and failed tests
+    :return: Generated HTML report as a string
+    """
+    try:
+        html_file_path = Path("test_reports/dr_html_report.html").resolve()
+        html_template = read_html_file(html_file_path)
+        
+        rows, multievent_explanation, chart_script = "", "", ""
+        test_passed, test_failed = result_count if result_count else (0, 0)
+
+        for event, results in test_results.items():
+            row = create_report_item(event, results)
+            if event == 'gluecompare':
+                row += create_chart_container()
+                chart_script = create_chart_script(test_passed, test_failed)
+            rows += row
+            if event == "multievent":
+                multievent_explanation = ("<div class='explanation'>The 'multievent' encompasses scenarios: mismatch, "
+                                          "scanned, and missingfile.</div>")
+
+        # Ensure the HTML template placeholders are correctly formatted
+        return html_template.format(
+            test_name='DR Test Automation Report',
+            timestamp=current_timestamp,
+            rows=rows,
+            environment=test_environment,
+            multievent_explanation=multievent_explanation,
+            chart_script=chart_script
+        )
+    except KeyError as e:
+        logging.error(f"KeyError encountered: {e}")
+        raise
+    except Exception as e:
+        logging.error(f"Error generating HTML report: {e}")
+        raise
+
+def create_report_item(event: str, results: Dict[str, str]) -> str:
+    """Create an HTML div for a report item."""
+    row = f'<div class="report-item">\n<h2>{event}</h2>\n'
+    for step, status in results.items():
+        css_class = status_classes.get(status, "not-run")
+        row += f'<div class="status {css_class}">{step}: {status}</div>\n'
+    row += "</div>\n"
+    return row
+
+def create_chart_container() -> str:
+    """Create an HTML div for the chart container."""
+    return """
+    <div class="chart-container">
+        <h2>Glue Compare Test Result</h2>
+        <canvas id="testResultChart"></canvas>
+    </div>
+    """
+
+# Example usage:
+test_results = {'event1': {'step1': 'succeeded', 'step2': 'failed'}, 'gluecompare': {'step1': 'succeeded'}}
+current_timestamp = '2023-06-18 12:00:00'
+test_environment = 'Production'
+result_count = (5, 2)
+report = generate_html_report(test_results, current_timestamp, test_environment, result_count)
+print(report)
