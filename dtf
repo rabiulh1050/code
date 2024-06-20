@@ -1,0 +1,246 @@
+import gzip
+import logging
+import os
+import shutil
+import subprocess
+import time
+import traceback
+import zipfile
+from datetime import datetime
+from glob import glob
+from pathlib import Path
+from random import randint
+from concurrent.futures import ThreadPoolExecutor
+
+import yaml
+from pytz import timezone
+
+from config import APP_CONFIG
+from logs import log_errors, configure_logging
+
+# Logger configuration
+logger = configure_logging()
+
+def unzip_single_file(filename, output_dir):
+    try:
+        with gzip.open(filename, 'rb') as file_in:
+            output_file = f"{output_dir}/{os.path.basename(filename).split('.gz')[0]}"
+            with open(output_file, 'wb') as file_out:
+                shutil.copyfileobj(file_in, file_out)
+                logger.info(f'{output_file} file created')
+        return True
+    except Exception as e:
+        log_errors(e, detailed_traceback=True)
+        return False
+
+def unzip_file(input_dir: str = None, file_pattern: str = None) -> bool:
+    """
+    Unzip file(s) matching the specified file pattern in the given input directory.
+    :param input_dir: Directory path containing zip files.
+    :param file_pattern: File pattern to filter the zipped files in the given input directory.
+    :return: True if successful, False otherwise.
+    """
+    try:
+        logger.info("Unzipping the files.")
+        output_dir = "/dtf_deploy/test_automation/lqcs-lris-test-execute/logs"
+        filenames = glob(f"{input_dir}/{file_pattern}*.gz")
+
+        with ThreadPoolExecutor() as executor:
+            results = list(executor.map(unzip_single_file, filenames, [output_dir] * len(filenames)))
+        
+        return all(results)
+    except Exception as e:
+        log_errors(e, detailed_traceback=True)
+        return False
+
+def zip_single_file(zipf, filename):
+    try:
+        zipf.write(filename, arcname=os.path.basename(filename), compress_type=zipfile.ZIP_DEFLATED)
+        os.remove(filename)
+        logger.info(f"Added {filename} to zip and removed the original file")
+        return True
+    except Exception as e:
+        log_errors(e, detailed_traceback=True)
+        return False
+
+def zip_files(input_dir: str = None, event_name: str = None, file_pattern: str = None) -> bool:
+    """
+    Zip file(s) matching the specified file pattern in the given input directory.
+    :param input_dir: Directory path containing files to zip.
+    :param event_name: Event name used in the zip file name.
+    :param file_pattern: File pattern to filter the files in the given input directory.
+    :return: True if successful, False otherwise.
+    """
+    try:
+        zip_file_name = f"{input_dir}/{event_name}_{file_pattern}.zip"
+        with zipfile.ZipFile(zip_file_name, "w", zipfile.ZIP_DEFLATED) as zipf:
+            filenames = glob(f"{input_dir}/{file_pattern}*.*")
+            with ThreadPoolExecutor() as executor:
+                results = list(executor.map(zip_single_file, [zipf] * len(filenames), filenames))
+
+            html_summary_report = f"/dtf_home/serial/{os.environ['DtfProjName']}/rpt/{file_pattern}_summary_report.html"
+            zipf.write(html_summary_report, arcname=os.path.basename(html_summary_report), compress_type=zipfile.ZIP_DEFLATED)
+        
+        return all(results)
+    except Exception as e:
+        log_errors(e, detailed_traceback=True)
+        return False
+
+def zip_dtf_files_wrapper(event_name: str = None, file_pattern: str = None) -> bool:
+    """
+    Wrapper function to unzip files, then zip them with the specified file pattern.
+    :param event_name: Event name used in the zip file name.
+    :param file_pattern: File pattern to filter the files.
+    :return: True if successful, False otherwise.
+    """
+    try:
+        zip_input_dir = f"/dtf_home/serial/{os.environ['DtfProjName']}/rpt"
+        if unzip_file(zip_input_dir, file_pattern):
+            logger.info("File unzipping completed.")
+        zip_output_dir = "/dtf_deploy/test_automation/lqcs-lris-test-execute/logs"
+        if zip_files(zip_output_dir, event_name, file_pattern):
+            logger.info("File zipping completed.")
+        return True
+    except Exception as e:
+        log_errors(e, detailed_traceback=True)
+        return False
+
+def replace_dtf_tc_token(input_file: str = None, test_case_name: str = None, token_dict: dict = None) -> bool:
+    """
+    Replace tokens in the DTF test case file and create a new file.
+    :param input_file: Path to the input DTF YAML test case file.
+    :param test_case_name: Name for the new test case file.
+    :param token_dict: Dictionary of tokens to replace in the input file.
+    :return: True if successful, False otherwise.
+    """
+    try:
+        with open(input_file, 'r') as infile, open(test_case_name, 'w') as outfile:
+            for line in infile:
+                for key, value in token_dict.items():
+                    line = line.replace(key, value)
+                outfile.write(line)
+        return True
+    except Exception as e:
+        log_errors(e, detailed_traceback=True)
+        return False
+
+def dtf_result_validation(yaml_summary_report_file: str = None) -> dict:
+    """
+    Validate the DTF test results from the YAML summary report.
+    :param yaml_summary_report_file: Path to the YAML summary report file.
+    :return: Dictionary with validation status and summary details.
+    """
+    logger.info(f'Starting DTF Test Result Validation with {yaml_summary_report_file}')
+    dtf_result_val = {"dtf_status": 'Unknown', "dtf_summary": {}}
+    try:
+        with open(Path(yaml_summary_report_file).resolve(), "r") as yaml_file:
+            summary_dict = yaml.safe_load(yaml_file).get('detail_metrics')
+            test_case_dict = {key: {k: v for k, v in val.items() if k in ["exec_status", "comp_status"]} for key, val in summary_dict.items()}
+
+        logger.info(f"Total DTF cases: {len(summary_dict)}")
+        dtf_result_val['dtf_summary'] = {
+            "total_dtf_test_cases": len(summary_dict),
+            "success_execution": [key for key, val in test_case_dict.items() if val.get('exec_status') == 'Success'],
+            "failed_execution": [key for key, val in test_case_dict.items() if val.get('exec_status') == 'Failed'],
+            "pass_comp_test_cases": [key for key, val in test_case_dict.items() if val.get('comp_status') in ["PASS", "PASS - Zero Input"]],
+            "fail_comp_test_cases": [key for key, val in test_case_dict.items() if val.get('comp_status') == 'FAIL'],
+            "not_comp_test_cases": [key for key, val in test_case_dict.items() if val.get('comp_status') == 'N/A'],
+        }
+
+        logger.info(f"DTF test result summary: {dtf_result_val['dtf_summary']}")
+
+        if dtf_result_val['dtf_summary']['failed_execution'] or dtf_result_val['dtf_summary']['fail_comp_test_cases']:
+            dtf_result_val['dtf_status'] = 'Fail'
+        elif len(dtf_result_val['dtf_summary']['pass_comp_test_cases']) + len(dtf_result_val['dtf_summary']['not_comp_test_cases']) == len(summary_dict):
+            dtf_result_val['dtf_status'] = 'Pass'
+        return dtf_result_val
+    except Exception as e:
+        log_errors(e, detailed_traceback=True)
+        return {}
+
+def wait_for_dtf_result(html_summary_report_file: str = None) -> bool:
+    """
+    Wait for the DTF code to generate the HTML summary report.
+    :param html_summary_report_file: Path to the HTML summary report file.
+    :return: True if the file is found within the timeout period, False otherwise.
+    """
+    start_time = time.time()
+    timeout = 600
+    try:
+        logger.info(f"DTF Summary Report file: {html_summary_report_file}")
+        yaml_summary_report = glob(f"{Path(html_summary_report_file).with_suffix('.yaml*')}")
+        if not yaml_summary_report:
+            logger.warning(f'DTF_ERROR: Abnormal Termination of {os.path.basename(html_summary_report_file).split("_su")[0]}.yaml')
+            return False
+
+        logger.info("Waiting for test result...")
+        while not Path(html_summary_report_file).resolve().is_file():
+            if time.time() - start_time >= timeout:
+                logger.warning("Timeout for Test Result!!!")
+                return False
+            logger.info(f"Waiting for {html_summary_report_file} file.")
+            time.sleep(10)
+
+        logger.info(f"Test Result File - {html_summary_report_file} found.")
+        return True
+    except Exception as e:
+        log_errors(e, detailed_traceback=True)
+        return False
+
+def dtf_execution(test_case_file: str = None, token_dict: dict = None, delete_flag: bool = True) -> dict:
+    """
+    Execute DTF with the provided test case file and token dictionary.
+    :param test_case_file: Path to the DTF test case file.
+    :param token_dict: Dictionary of tokens to replace in the test case file.
+    :param delete_flag: Flag indicating whether to delete files after processing.
+    :return: Dictionary with DTF execution status and details.
+    """
+    est_timezone = timezone('US/Eastern')
+    dtf_inbound_directory = "/dtf_home/dtf/inbound"
+    timestamp = datetime.now(est_timezone).strftime('%Y%m%d%H%M%S')
+    dtf_proj_name = os.environ.get('DtfProjName', 'default_project')
+    dtf_result = {"dtf_status": 'NotRun', "dtf_details": {}}
+    
+    try:
+        test_case_name = f"{dtf_proj_name}_{timestamp}"
+        if any(test_case_name in elm for elm in glob(f"{dtf_inbound_directory}/{test_case_name}*")):
+            logger.info('Avoid multiple files with the same name for DTF execution.')
+            temp_fl_nm = list(test_case_name)
+            temp_fl_nm[-6] = str(randint(0, 9))
+            test_case_name = "".join(temp_fl_nm)
+
+        os.chdir(dtf_inbound_directory)
+        if not replace_dtf_tc_token(test_case_file, f"{test_case_name}.yaml", token_dict):
+            return dtf_result
+
+        shutil.copyfile(f"{test_case_name}.yaml", f"/dtf_deploy/test_automation/lqcs-lris-test-execute/logs/{test_case_name}.yaml")
+        logger.info(f"Prepared DTF Test Case YAML file for {token_dict.get('event_name')}- {test_case_file}: {test_case_name}.yaml for execution.")
+        
+        script_path = '/dtf_home/dtf/src/bin/ef_invoker.ksh'
+        if not (os.path.exists(script_path) and os.access(script_path, os.X_OK)):
+            logger.error(f"Script not found or not executable: {script_path}")
+            return dtf_result
+
+        result = subprocess.run(['bash', script_path, f'{test_case_name}.yaml'], capture_output=True, text=True)
+        if result.returncode != 0:
+            logger.error(f"Script execution failed: {result.stderr}")
+            return dtf_result
+
+        logger.info(f"Script executed successfully: {result.stdout}")
+
+        html_test_result_file = f"/dtf_home/serial/{dtf_proj_name}/rpt/{test_case_name}_summary_report.html"
+        if not wait_for_dtf_result(html_test_result_file):
+            logger.warning(f"No DTF result found for {html_test_result_file}")
+            return dtf_result
+
+        if not zip_dtf_files_wrapper(token_dict.get('event_name'), test_case_name):
+            logger.error(f"Failed to zip files for {token_dict.get('event_name')} - {test_case_name}")
+
+        dtf_result = dtf_result_validation(html_test_result_file.replace('.html', '.yaml'))
+        logger.info(f"DTF execution completed with status: {dtf_result}")
+
+        os.chdir(Path(__file__).parent)
+    except Exception as e:
+        log_errors(e, detailed_traceback=True)
+    finally:
+        return dtf_result
