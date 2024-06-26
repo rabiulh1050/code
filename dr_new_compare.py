@@ -219,3 +219,42 @@ def dr_glue_main_process(dr_zip_file_dir: str, dr_input_file_dir: str) -> dict:
 # Example usage:
 # result = dr_glue_main_process('/path/to/dr_zip_file_dir', '/path/to/dr_input_file_dir')
 # print(result)
+
+
+
+
+
+#########
+import os
+import pyarrow.parquet as pq
+import logging
+
+logger = logging.getLogger(__name__)
+
+def log_errors(exception, detailed_traceback=False):
+    # Assuming a function to log errors
+    logger.error(f"Error: {exception}")
+    if detailed_traceback:
+        logger.exception(exception)
+
+def read_parquet_file_metadata(parquet_file: str) -> dict:
+    """Reads metadata from the specified parquet file."""
+    try:
+        parquet_file_name = os.path.basename(parquet_file).split('.parquet')[0]
+        parquet_file_obj = pq.ParquetFile(parquet_file)
+        pq_cols_name_ls = parquet_file_obj.schema_arrow.names
+        metadata = {
+            'File_Columns_Names': pq_cols_name_ls,
+            'File_Columns_Counts': len(pq_cols_name_ls)
+        } if pq_cols_name_ls else {
+            'File_Columns_Names': [],
+            'File_Columns_Counts': 0
+        }
+        logger.debug(f"{parquet_file_name}: {pq_cols_name_ls}")
+        return parquet_file_name, metadata
+    except Exception as e:
+        log_errors(e, detailed_traceback=True)
+        return os.path.basename(parquet_file).split('.parquet')[0], {
+            'File_Columns_Names': [],
+            'File_Columns_Counts': 0
+        }
