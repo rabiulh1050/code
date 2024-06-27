@@ -293,3 +293,52 @@ def read_parquet_file_metadata(parquet_file: str) -> dict:
             'File_Columns_Names': [],
             'File_Columns_Counts': 0
         }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+import os
+import logging
+import pandas as pd
+
+logger = logging.getLogger(__name__)
+
+def log_errors(exception, detailed_traceback=False):
+    # Assuming a function to log errors
+    logger.error(f"Error: {exception}")
+    if detailed_traceback:
+        logger.exception(exception)
+
+def read_parquet_file_metadata(parquet_file: str) -> dict:
+    """Reads metadata from the specified parquet file."""
+    try:
+        parquet_file_name = os.path.basename(parquet_file).split('.parquet')[0]
+        # Reading just the metadata
+        pq_df = pd.read_parquet(parquet_file, engine='auto', columns=[])
+        pq_cols_name_ls = pq_df.columns.tolist()
+        metadata = {
+            'File_Columns_Names': pq_cols_name_ls,
+            'File_Columns_Counts': len(pq_cols_name_ls)
+        } if pq_cols_name_ls else {
+            'File_Columns_Names': [],
+            'File_Columns_Counts': 0
+        }
+        logger.debug(f"{parquet_file_name}: {pq_cols_name_ls}")
+        return parquet_file_name, metadata
+    except Exception as e:
+        log_errors(e, detailed_traceback=True)
+        return os.path.basename(parquet_file).split('.parquet')[0], {
+            'File_Columns_Names': [],
+            'File_Columns_Counts': 0
+        }
+
