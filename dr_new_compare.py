@@ -342,3 +342,69 @@ def read_parquet_file_metadata(parquet_file: str) -> dict:
             'File_Columns_Counts': 0
         }
 
+
+
+
+
+
+
+
+
+################
+import os
+import glob
+import logging
+import pandas as pd
+
+logger = logging.getLogger(__name__)
+
+def log_errors(exception, detailed_traceback=False):
+    # Assuming a function to log errors
+    logger.error(f"Error: {exception}")
+    if detailed_traceback:
+        logger.exception(exception)
+
+def unzip_file(zip_file: str, output_dir: str) -> bool:
+    # Assuming a function to unzip the file
+    # Returns True if unzipping is successful, False otherwise
+    try:
+        import zipfile
+        with zipfile.ZipFile(zip_file, 'r') as zip_ref:
+            zip_ref.extractall(output_dir)
+        return True
+    except Exception as e:
+        log_errors(e, detailed_traceback=True)
+        return False
+
+def read_parquet_file_metadata(parquet_file: str) -> dict:
+    """Reads metadata from the specified parquet file."""
+    try:
+        parquet_file_name = os.path.basename(parquet_file).split('.parquet')[0]
+        # Reading just the metadata
+        pq_df = pd.read_parquet(parquet_file, engine='auto')
+        pq_cols_name_ls = pq_df.columns.tolist()
+        metadata = {
+            'File_Columns_Names': pq_cols_name_ls,
+            'File_Columns_Counts': len(pq_cols_name_ls)
+        } if pq_cols_name_ls else {
+            'File_Columns_Names': [],
+            'File_Columns_Counts': 0
+        }
+        logger.debug(f"{parquet_file_name}: {pq_cols_name_ls}")
+        return parquet_file_name, metadata
+    except Exception as e:
+        log_errors(e, detailed_traceback=True)
+        return os.path.basename(parquet_file).split('.parquet')[0], {
+            'File_Columns_Names': [],
+            'File_Columns_Counts': 0
+        }
+
+def process_zip_file(zip_file: str, output_dir: str) -> dict:
+    """Processes a single zip file: unzips it and reads metadata from contained parquet files."""
+    file_metadata_dict = {}
+    if unzip_file(zip_file, output_dir):
+        parquet_files = glob.glob(f"{output_dir}/*.parquet")
+        for file in parquet_files:
+            parquet_file_name, metadata = read_parquet_file_metadata(file)
+            file_metadata_dict[parquet_file_name] = metadata
+    return file_metadata_dict
