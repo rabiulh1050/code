@@ -6,7 +6,7 @@ from glob import glob
 from datetime import datetime
 import boto3
 import pyarrow.parquet as pq
-import multiprocessing
+import concurrent.futures
 from botocore.exceptions import ClientError
 from aws_utils_func import log_errors, configure_logging
 import re
@@ -63,8 +63,8 @@ def process_zip_file(zip_file: str, output_dr_dir: str) -> dict:
         return None  # Indicate failure to process this zip file
 
     parquet_files = glob(f"{output_dr_dir}/*.parquet")
-    with multiprocessing.Pool() as pool:
-        results = pool.map(process_parquet_file, parquet_files)
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        results = executor.map(process_parquet_file, parquet_files)
         for parquet_file_name, metadata in results:
             if metadata['File_Columns_Counts'] == 0:
                 logger.warning(f"Failed to extract column names for parquet file: {parquet_file_name}")
@@ -79,8 +79,8 @@ def get_dr_file_header(input_dr_zip_dir: str, output_dr_dir: str) -> dict:
         logger.info(f"Found {len(zip_files)} zip files in {input_dr_zip_dir}")
 
         file_metadata_dict = {}
-        with multiprocessing.Pool() as pool:
-            results = pool.starmap(process_zip_file, [(zip_file, output_dr_dir) for zip_file in zip_files])
+        with concurrent.futures.ProcessPoolExecutor() as executor:
+            results = executor.map(process_zip_file, zip_files, [output_dr_dir] * len(zip_files))
             for result in results:
                 if result is None:
                     logger.error("Stopping execution due to failed zip file extraction.")
@@ -131,8 +131,8 @@ def get_glue_tbls_metadata(tables_list: list) -> dict:
     """Retrieves metadata for a list of Glue tables."""
     client = boto3.client('glue')
     table_metadata_dict = {}
-    with multiprocessing.Pool() as pool:
-        results = pool.map(get_glue_table_metadata_helper, [(client, table.split(',')[0].lower(), table.split(',')[1].lower()) for table in tables_list])
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        results = executor.map(get_glue_table_metadata_helper, [(client, table.split(',')[0].lower(), table.split(',')[1].lower()) for table in tables_list])
         for table, table_metadata in zip(tables_list, results):
             table_name = table.split(',')[1].lower()
             table_metadata_dict[table_name] = table_metadata
