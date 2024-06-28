@@ -63,3 +63,23 @@ def get_latest_files(file_dir, file_type, file_count=3):
 dr_file_dir = 'path/to/your/directory'
 latest_files = get_latest_files(dr_file_dir, 'zip')
 print(latest_files)
+
+
+
+
+def unzip_file(input_zip_file: str, output_dir: str) -> bool:
+    """Unzips the specified zip file to the given output directory, overwriting existing files."""
+    try:
+        with zipfile.ZipFile(input_zip_file, 'r') as zip_ref:
+            for member in zip_ref.namelist():
+                target_path = os.path.join(output_dir, member)
+                # Create target directory if it doesn't exist
+                os.makedirs(os.path.dirname(target_path), exist_ok=True)
+                # Extract file (overwrites if it exists)
+                with zip_ref.open(member) as source, open(target_path, "wb") as target:
+                    target.write(source.read())
+        logger.info(f"Extracted {input_zip_file} to {output_dir}")
+        return True
+    except (zipfile.BadZipFile, zipfile.LargeZipFile, OSError) as e:
+        log_errors(e, detailed_traceback=True)
+        return False
