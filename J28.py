@@ -9,8 +9,10 @@ import pyarrow.parquet as pq
 import multiprocessing
 from botocore.exceptions import ClientError
 from aws_utils_func import log_errors, configure_logging
+import re
+import shutil
 
-# logger configuration
+# Logger configuration
 logger = configure_logging()
 
 def unzip_file(input_zip_file: str, output_dir: str) -> bool:
@@ -23,7 +25,7 @@ def unzip_file(input_zip_file: str, output_dir: str) -> bool:
                 os.makedirs(os.path.dirname(target_path), exist_ok=True)
                 # Extract file (overwrites if it exists)
                 with zip_ref.open(member) as source, open(target_path, "wb") as target:
-                    target.write(source.read())
+                    shutil.copyfileobj(source, target)
         logger.info(f"Extracted {input_zip_file} to {output_dir}")
         return True
     except (zipfile.BadZipFile, zipfile.LargeZipFile, OSError) as e:
@@ -209,12 +211,24 @@ def dr_glue_main_process(dr_zip_file_dir: str, dr_input_file_dir: str) -> dict:
         logger.error("".join(tb.format()))
         return {"Glue Table Validation": "FAILED"}
 
-def get_latest_files(file_list):
-    """Returns the latest files matching the required file pattern."""
+def get_latest_files(file_dir, file_type, file_count=3):
+    """
+    Returns the latest files matching the required file pattern.
+
+    :param file_dir: Directory containing the files.
+    :param file_type: File type such as zip, text, etc.
+    :param file_count: Number of latest files to return. Default is 3.
+    :return: List of the latest files matching the pattern.
+    """
+    # Use glob to get all files of the specified type in the directory
+    file_list = glob(os.path.join(file_dir, f'*.{file_type}'))
+    logger.info(f'Test data found: {file_list} in {file_dir}')
+
     pattern = re.compile(r'(\d{8})-\d{4}_par0[1-3]\.zip')
     files_by_date = {}
 
-    for filename in file_list:
+    for file_path in file_list:
+        filename = os.path.basename(file_path)
         match = pattern.match(filename)
         if match:
             date_str = match.group(1)
@@ -229,7 +243,11 @@ def get_latest_files(file_list):
     for date in sorted_dates:
         parts = sorted(files_by_date[date])
         latest_files.extend(parts)
-        if len(latest_files) >= 3:
+        if len(latest_files) >= file_count:
             break
 
-    return latest_files[:3]
+    logger.info(f'Latest file data found: {latest_files}')
+
+    latest_data = [os.path.join(file_dir, file) for file in latest_files]
+    logger.info(f'Path to latest zip files: {latest_data}')
+    return latest_data[:file_count]
