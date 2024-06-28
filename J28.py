@@ -6,6 +6,15 @@ from glob import glob
 
 logger = logging.getLogger(__name__)
 
+def get_pattern(extension):
+    """
+    Returns a compiled regular expression pattern for the given file extension.
+
+    :param extension: File extension to match, such as 'zip'.
+    :return: Compiled regular expression pattern.
+    """
+    return re.compile(fr'(\d{8})-\d{4}_par0[1-3]\.{extension}')
+
 def get_latest_files(file_dir, file_type, file_count=3):
     """
     Returns the latest files matching the required file pattern.
@@ -19,7 +28,7 @@ def get_latest_files(file_dir, file_type, file_count=3):
     file_list = glob(os.path.join(file_dir, f'*.{file_type}'))
     logger.info(f'Test data found: {file_list} in {file_dir}')
 
-    pattern = re.compile(r'(\d{8})-\d{4}_par0[1-3]\.zip')
+    pattern = get_pattern(file_type)
     files_by_date = {}
 
     for file_path in file_list:
@@ -47,7 +56,7 @@ def get_latest_files(file_dir, file_type, file_count=3):
         return [] 
     else: 
         latest_data = [os.path.join(file_dir, file) for file in latest_files]
-        logger.info(f'Path to latest zip files: {latest_data}')
+        logger.info(f'Path to latest {file_type} files: {latest_data}')
         return latest_data
 
 # Example usage
