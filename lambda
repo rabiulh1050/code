@@ -1,0 +1,116 @@
+import boto3
+from datetime import datetime
+from botocore.exceptions import BotoCoreError, ClientError
+import logging
+import os
+
+# Logger configuration
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+handler = logging.StreamHandler()
+formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+
+# AWS S3 client configuration
+s3_client = boto3.client('s3')
+s3_bucket = os.getenv('S3Bucket')
+s3_prefix = 'prepare/cin/dflt/DSET99999999/test_data/vending/'
+
+logger.info(f"S3 bucket: {s3_bucket}")
+
+def lambda_handler(event, context):
+    """AWS Lambda handler function."""
+    logger.info(f"Received event: {event}")
+    try:
+        deleted_objects = delete_s3_objects(s3_prefix)
+        if deleted_objects:
+            logger.info(f"Deleted objects: {deleted_objects}")
+        else:
+            logger.info('No objects were deleted.')
+    except Exception as e:
+        logger.error(f"Unexpected error occurred during deletion: {str(e)}")
+
+    try:
+        file_name, sns_message = extract_sns_message_details(event)
+        if file_name and sns_message:
+            file_name = construct_s3_file_name(file_name)
+            logger.info(f"Constructed file name: {file_name}")
+            response = upload_to_s3(file_name, sns_message)
+            logger.info(f"S3 upload response: {response}")
+    except Exception as e:
+        logger.error(f"Unexpected error occurred during S3 upload: {str(e)}")
+
+def delete_s3_objects(s3_key_prefix: str):
+    """
+    Deletes S3 objects for the provided S3 prefix.
+    
+    :param s3_key_prefix: S3 object prefix
+    :return: List of deleted object keys
+    """
+    deleted_objects = []
+    try:
+        logger.info(f"Fetching object list from S3://{s3_bucket}/{s3_key_prefix}")
+        paginator = s3_client.get_paginator('list_objects_v2')
+        page_iterator = paginator.paginate(Bucket=s3_bucket, Prefix=s3_key_prefix)
+        for page in page_iterator:
+            if 'Contents' in page:
+                delete_keys = [{'Key': obj['Key']} for obj in page['Contents']]
+                try:
+                    delete_response = s3_client.delete_objects(Bucket=s3_bucket, Delete={'Objects': delete_keys})
+                    deleted_objects.extend([obj['Key'] for obj in delete_response.get('Deleted', [])])
+                except ClientError as delete_error:
+                    logger.error(f"Error deleting objects: {delete_error}")
+        return deleted_objects
+    except (ClientError, BotoCoreError) as e:
+        logger.error(f"Error occurred while listing/deleting objects: {str(e)}")
+    except Exception as e:
+        logger.error(f"Unexpected error: {str(e)}")
+    return None
+
+def extract_sns_message_details(event):
+    """
+    Extracts the SNS message details from the event.
+    
+    :param event: Lambda event payload
+    :return: Tuple of file name and SNS message
+    """
+    try:
+        sns_record = event.get('Records', [])[0].get('Sns', {})
+        topic_arn = sns_record.get('TopicArn', '')
+        sns_message = sns_record.get('Message', None)
+        file_name = topic_arn.split(':')[-1].split('-')[-3]
+        return file_name, sns_message
+    except (IndexError, AttributeError) as e:
+        logger.error(f"Error extracting SNS message details: {str(e)}")
+    return None, None
+
+def construct_s3_file_name(base_file_name: str):
+    """
+    Constructs the S3 file name using the base file name and current timestamp.
+    
+    :param base_file_name: Base file name extracted from SNS message
+    :return: Constructed S3 file name
+    """
+    execution_runtime = datetime.now().strftime('%m%d%Y%H%M%S')
+    return f"{s3_prefix}{base_file_name}_{execution_runtime}.xml"
+
+def upload_to_s3(file_name: str, content: str):
+    """
+    Uploads content to S3 with the specified file name.
+    
+    :param file_name: S3 file name
+    :param content: Content to upload
+    :return: Response from S3 put_object call
+    """
+    try:
+        response = s3_client.put_object(
+            Bucket=s3_bucket,
+            Key=file_name,
+            Body=content,
+            ContentType='text/xml'
+        )
+        return response
+    except (ClientError, BotoCoreError) as e:
+        logger.error(f"Error uploading to S3: {str(e)}")
+        raise
